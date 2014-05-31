@@ -1,0 +1,16 @@
+<manifest>
+        <define>
+                <domain name="alarm-server"/>
+                <provide>
+                        <label name="alarm-server::db"/>
+                        <label name="alarm-server::alarm"/>
+                </provide>
+        </define>
+        <request>
+                <domain name="alarm-server"/>
+        </request>
+    <assign>
+        <filesystem path="/usr/lib/systemd/system/alarm-server.service" label="_" exec_label="none" />
+        <filesystem path="/usr/lib/systemd/system/multi-user.target.wants/alarm-server.service" label="_" exec_label="none" />
+    </assign>
+</manifest>

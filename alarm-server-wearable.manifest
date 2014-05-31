@@ -1,0 +1,16 @@
+<manifest>
+	<define>
+		<domain name="alarm-server"/>
+		<provide>
+			<label name="alarm-server::db"/>
+			<label name="alarm-server::alarm"/>
+		</provide>
+		<request>
+			<smack request="deviced::display" type="rw"/>
+                        <smack request="security-server::api-cookie-check" type="w"/>
+		</request>
+	</define>
+	<request>
+		<domain name="alarm-server"/>
+	</request>
+</manifest>

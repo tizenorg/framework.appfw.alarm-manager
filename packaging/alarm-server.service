@@ -1,0 +1,10 @@
+[Unit]
+Description=Alarm server
+After=system-server.service
+
+[Service]
+ExecStart=/usr/bin/alarm-server
+
+[Install]
+WantedBy=multi-user.target
+
