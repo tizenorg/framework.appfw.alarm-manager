@@ -20,9 +20,6 @@
  *
  */
 
-
-
-
 #ifndef _ALARM_INTERNAL_H
 #define _ALARM_INTERNAL_H
 
@@ -33,19 +30,18 @@
 #define ALARM_INFO_MAX 100
 
 #include "alarm.h"
-#include <dbus/dbus-glib.h>
 #include <glib.h>
 #include <dlog.h>
 #include <bundle.h>
 #include <appsvc.h>
-
-#define __APP_SYNC
+#include <gio/gio.h>
 
 #define INIT_ALARM_LIST_SIZE 64
 #define INIT_SCHEDULED_ALARM_LIST_SIZE 32
 #define MAX_BUNDLE_NAME_LEN 2048
 #define MAX_SERVICE_NAME_LEN 256
 #define MAX_PKG_NAME_LEN MAX_SERVICE_NAME_LEN-8
+#define MAX_PKG_ID_LEN 256
 
 #define SYSTEM_TIME_CHANGED "setting_time_changed"
 
@@ -72,8 +68,8 @@ application server.*/
 /*#define	_EXPIRE_ALARM_INTERFACE_IS_DBUS_GPROXY_ */
 
 typedef struct {
-	DBusGConnection *bus;
-	DBusGProxy *proxy;
+	GDBusConnection *connection;
+	GDBusProxy *proxy;
 	alarm_cb_t alarm_handler;
 	void *user_param;
 	int pid;		/* this specifies pid*/
@@ -138,14 +134,8 @@ bool _send_alarm_get_number_of_ids(alarm_context_t context, int *num_of_ids,
 bool _send_alarm_get_info(alarm_context_t context, alarm_id_t alarm_id,
 			   alarm_info_t *alarm_info, int *error_code);
 bool _send_alarm_reset(alarm_context_t context, int *error_code);
-
-bool _send_alarm_power_on(alarm_context_t context, bool on_off,
-			   int *error_code);
-bool _send_alarm_check_next_duetime(alarm_context_t context, int *error_code);
-bool _send_alarm_power_off(alarm_context_t context, int *error_code);
 bool _remove_from_scheduled_alarm_list(int pid, alarm_id_t alarm_id);
 bool _load_alarms_from_registry();
-bool _alarm_find_mintime_power_on(time_t *min_time);
 bundle *_send_alarm_get_appsvc_info(alarm_context_t context, alarm_id_t alarm_id, int *error_code);
 bool _send_alarm_set_rtc_time(alarm_context_t context, alarm_date_t *time, int *error_code);
 
@@ -154,8 +144,10 @@ typedef struct {
 	time_t start;
 	time_t end;
 
-	int alarm_id;
+	alarm_id_t alarm_id;
 	int pid;
+	GQuark quark_caller_pkgid;
+	GQuark quark_callee_pkgid;
 	GQuark quark_app_unique_name;	/*the fullpath of application's pid is
 		converted to quark value.*/
 	GQuark quark_app_service_name;	/*dbus_service_name is converted  to
@@ -180,12 +172,12 @@ typedef struct {
 } __alarm_entry_t;
 
 typedef struct {
-	timer_t timer;
+	int timer;
 	time_t c_due_time;
 	GSList *alarms;
 	int gmt_idx;
 	int dst;
-	DBusGConnection *bus;
+	GDBusConnection *connection;
 } __alarm_server_context_t;
 
 typedef struct {
@@ -209,17 +201,14 @@ bool _save_alarms(__alarm_info_t *__alarm_info);
 bool _delete_alarms(alarm_id_t alarm_id);
 bool _update_alarms(__alarm_info_t *__alarm_info);
 
-timer_t _alarm_create_timer();
 bool _alarm_destory_timer(timer_t timer);
-bool _alarm_set_timer(__alarm_server_context_t *alarm_context, timer_t timer,
-		       time_t due_time, alarm_id_t id);
+bool _alarm_set_timer(__alarm_server_context_t *alarm_context, int timer, time_t due_time);
 bool _alarm_disable_timer(__alarm_server_context_t alarm_context);
 bool _init_scheduled_alarm_list();
 
 int _set_rtc_time(time_t _time);
 int _set_sys_time(time_t _time);
 int _set_time(time_t _time);
-
 
 #ifdef _DEBUG_MODE_
 #define ALARM_MGR_LOG_PRINT(FMT, ARG...)  do { printf("%5d", getpid()); printf
@@ -233,15 +222,5 @@ int _set_time(time_t _time);
 #define ALARM_MGR_EXCEPTION_PRINT(FMT, ARG...) LOGW(FMT, ##ARG);
 #define ALARM_MGR_ASSERT_PRINT(FMT, ARG...) LOGE(FMT, ##ARG);
 #endif
-
-/* int alarmmgr_check_next_duetime();*/
-
-#ifdef __APP_SYNC
-bool _sync_scheduler_app_sync_on();
-void _sync_scheduler_init();
-void _sync_scheduler_repeating_alarms(__alarm_info_t *alarm_info);
-void _sync_scheduler_remove_repeating_alarm(alarm_id_t alarm_id);
-#endif //__APP_SYNC
-
 
 #endif /*_ALARM_INTERNAL_H*/

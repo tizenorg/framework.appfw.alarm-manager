@@ -7,9 +7,12 @@
 		</provide>
 		<request>
 			<smack request="deviced::display" type="rw"/>
-                        <smack request="security-server::api-cookie-check" type="w"/>
+			<smack request="security-server::api-cookie-check" type="w"/>
 		</request>
 	</define>
+	<assign>
+		<filesystem path="/opt/etc/dump.d/module.d/alarmmgr_log_dump.sh" label="_" exec_label="none"/>
+	</assign>
 	<request>
 		<domain name="alarm-server"/>
 	</request>

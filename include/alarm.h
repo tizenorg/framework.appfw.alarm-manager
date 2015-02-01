@@ -122,7 +122,7 @@ int main(int argc, char** argv)
 	g_type_init();
 
 	mainloop = g_main_loop_new(NULL, FALSE);
-	result = alarmmgr_init("org.tizen.test");
+	result = alarmmgr_init("com.samsung.test");
 
 	if(result != ALARMMGR_RESULT_SUCCESS) {
 		printf("fail to alarmmgr_init : error_code : %d\n",result);
@@ -256,7 +256,7 @@ typedef struct alarm_info_t alarm_entry_t;
 ...
 {
 	int ret_val = ALARMMGR_RESULT_SUCCESS;
-	const char* pkg_name = "org.tizen.test";
+	const char* pkg_name = "com.samsung.test";
 
 	g_type_init();
 
@@ -830,7 +830,7 @@ int alarmmgr_get_type(const alarm_entry_t *alarm, int *alarm_type);
 	}
 
 	appsvc_set_operation(b,APPSVC_OPERATION_DEFAULT);
-	appsvc_set_pkgname(b,"org.tizen.alarm-test");
+	appsvc_set_pkgname(b,"com.samsung.alarm-test");
 
     time(&current_time);
 
@@ -907,7 +907,7 @@ int alarmmgr_add_alarm_appsvc_with_localtime(alarm_entry_t *alarm,void *bundle_d
 	struct tm current_tm;
 	alarm_date_t test_time;
 
-	const char* pkg_name = "org.tizen.test";
+	const char* pkg_name = "com.samsung.test";
 
 	g_type_init();
 
@@ -1002,7 +1002,7 @@ int alarmmgr_add_alarm_with_localtime(alarm_entry_t *alarm,
 			return;
 		}
 
-		appsvc_set_pkgname(b,"org.tizen.alarm-test");
+		appsvc_set_pkgname(b,"com.samsung.alarm-test");
 		//appsvc_set_operation(b,APPSVC_OPERATION_SEND_TEXT);
 		appsvc_set_operation(b,APPSVC_OPERATION_DEFAULT);
 
@@ -1059,7 +1059,7 @@ int alarmmgr_add_alarm_appsvc(int alarm_type, time_t trigger_at_time,
 	 const char* destination = NULL;
 	 alarm_id_t alarm_id;
 
-	 const char* pkg_name = "org.tizen.test";
+	 const char* pkg_name = "com.samsung.test";
 
 	 g_type_init();
 
@@ -1115,7 +1115,7 @@ int alarmmgr_add_alarm(int alarm_type, time_t trigger_at_time,
 	const char* destination = NULL;
 	alarm_id_t alarm_id;
 
-	const char* pkg_name = "org.tizen.test";
+	const char* pkg_name = "com.samsung.test";
 
 	g_type_init();
 
@@ -1179,7 +1179,7 @@ int alarmmgr_remove_all(void);
 	 int ret_val = ALARMMGR_RESULT_SUCCESS;
 	 int n = 1;
 
-	 const char* pkg_name = "org.tizen.test";
+	 const char* pkg_name = "com.samsung.test";
 
 	 g_type_init();
 
@@ -1236,7 +1236,7 @@ int alarmmgr_enum_alarm_ids(alarm_enum_fn_t fn, void *user_param);
 
 	alarm_entry_t *alarm;
 
-	const char* pkg_name = "org.tizen.test_get_info1";
+	const char* pkg_name = "com.samsung.test_get_info1";
 
 	g_type_init();
 
@@ -1301,7 +1301,7 @@ register_alarm(){
 		return;
 	}
 
-	appsvc_set_pkgname(b,"org.tizen.alarm-test");
+	appsvc_set_pkgname(b,"com.samsung.alarm-test");
 	appsvc_set_operation(b,APPSVC_OPERATION_DEFAULT);
 
 	if ((result = alarmmgr_add_alarm_appsvc(ALARM_TYPE_DEFAULT, 10, 0, (void *)b ,&alarm_id)))
@@ -1380,18 +1380,6 @@ int alarmmgr_set_rtc_time(alarm_date_t *time);
 
 int alarmmgr_add_alarm_withcb(int alarm_type, time_t trigger_at_time,
 				  time_t interval, alarm_cb_t handler, void *user_param, alarm_id_t *alarm_id);
-
-/**
- * @}
- */
-
-
-/**
- * @}
- */
-
-
-int alarmmgr_power_on(bool on_off);
 
 #ifdef __cplusplus
 }

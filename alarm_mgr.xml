@@ -44,27 +44,15 @@
       <arg type="i" name="alarm_id" direction="out" />
       <arg type="i" name="return_code" direction="out" />
     </method>
-	<method name="alarm_delete">
+    <method name="alarm_delete">
       <arg type="i" name="pid" direction="in" />
       <arg type="i" name="alarm_id" direction="in" />
       <arg type="s" name="cookie" direction="in" />
       <arg type="i" name="alarm_info_return_code" direction="out" />
     </method>
     <method name="alarm_delete_all">
-	  <arg type="i" name="pid" direction="in" />
-	  <arg type="i" name="alarm_info_return_code" direction="out" />
-    </method>
-	<method name="alarm_power_on">
       <arg type="i" name="pid" direction="in" />
-      <arg type="i" name="on_off" direction="in" />
-      <arg type="i" name="alarm_info_return_code" direction="out" />
-    </method>
-	<method name="alarm_power_off">
-      <arg type="i" name="pid" direction="in" />
-      <arg type="i" name="alarm_info_return_code" direction="out" />
-    </method>
-	<method name="alarm_check_next_duetime">
-      <arg type="i" name="pid" direction="in" />
+      <arg type="s" name="cookie" direction="in" />
       <arg type="i" name="alarm_info_return_code" direction="out" />
     </method>
 	<method name="alarm_update">
@@ -88,6 +76,7 @@
     </method>
 	<method name="alarm_get_number_of_ids">
 	  <arg type="i" name="pid" direction="in" />
+	  <arg type="s" name="cookie" direction="in" />
 	  <arg type="i" name="number_of_ids" direction="out" />
 	  <arg type="i" name="return_code" direction="out" />
     </method>
@@ -108,6 +97,7 @@
     <method name="alarm_get_info">
 	  <arg type="i" name="pid" direction="in" />
 	  <arg type="i" name="alarm_id" direction="in" />
+	  <arg type="s" name="cookie" direction="in" />
       <arg type="i" name="alarm_info_start_year" direction="out" />
       <arg type="i" name="alarm_info_start_month" direction="out" />
       <arg type="i" name="alarm_info_start_day" direction="out" />
@@ -137,7 +127,14 @@
 	<method name="alarm_get_next_duetime">
 	  <arg type="i" name="pid" direction="in" />
 	  <arg type="i" name="alarm_id" direction="in" />
+	  <arg type="s" name="cookie" direction="in" />
 	  <arg type="i" name="duetime" direction="out" />
+	  <arg type="i" name="return_code" direction="out" />
+    </method>
+	<method name="alarm_get_all_info">
+	  <arg type="i" name="pid" direction="in" />
+	  <arg type="s" name="cookie" direction="in" />
+	  <arg type="s" name="db_path" direction="out" />
 	  <arg type="i" name="return_code" direction="out" />
     </method>
     <method name="alarm_set_time">
