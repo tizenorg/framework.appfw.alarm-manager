@@ -24,7 +24,7 @@
 
 /**
  @ingroup SLP_PG
- @defgroup SLP_PG_ALARM_MANAGER Alarm
+ @defgroup SLP_PG_ALARM_MANAGER AlarmManager
  @{
 
 <h1 class="pg">Introduction</h1>
@@ -41,7 +41,23 @@ The scope of this document is limited to Alarm Manager API usage.
 <h2 class="pg">Architecture overview</h2>
 The Alarm Manager provides functionality for applications to create, delete and configure alarms. Applications register alarm information and the Alarm Manager manages the alarm information, generates timer and schedule alarms. When the timer expires, the Alarm Manager sends an event to the applications. 
 
-@image html SLP_Alarm_PG_overview.png
+Refer to Picture 1. for Overview.
+
+<h1 class="pg">AlarmManager Overview</h1>
+\image html SLP_Alarm_PG_overview.png "Picture 1. AlarmManager Overview"
+\image rtf SLP_Alarm_PG_overview.png "Picture 1. AlarmManager Overview"
+
+<h1 class="pg">AlarmManager Process view</h1>
+
+<h2 class="pg">AlarmManager Process view</h2>
+ Applications register alarm information using AlarmManager API's. Alarm Manager manages the alarm information in DB, generates timer and schedule alarms. When the timer expires, the Alarm Manager sends an event to the application. If auto-activation of application is enabled then, alarm manager launches the application using app-svc.
+
+Refer to Picture 2. for AlarmManager Process view.
+
+<h1 class="pg">AlarmManager Process view</h1>
+\image html SLP_Alarm_PG_processview.png "Picture 1. AlarmManager Process view"
+\image rtf SLP_Alarm_PG_processview.png "Picture 1. AlarmManager Process view"
+
 
 <h2 class="pg">SLP Features</h2>
 - The Alarm Manager exposes a high level interface that is used by applications.

@@ -31,11 +31,11 @@
  * @addtogroup APPLICATION_FRAMEWORK
  * @{
  *
- * @defgroup Alarm Alarm
+ * @defgroup AlarmManager
  * @version 0.4.2
- * 
  *
- * Alarm  supports APIs that add, delete, and update an alarm. 
+ *
+ * Alarm  supports APIs that add, delete, and update an alarm.
  * @n An application can use alarm APIs by including @c alarm.h. The definitions
  * of APIs are defined as follows:
  *
@@ -54,11 +54,12 @@
  * @li @c #alarmmgr_remove_alarm remove an alarm from alarm server
  * @li @c #alarmmgr_enum_alarm_ids get the list of alarm ids
  * @li @c #alarmmgr_get_info get the information of an alarm
- * 
+ * @li @c #alarmmgr_fini de-initialize alarm library
  *
- * The following code shows how to initialize alarm library, how to register the alarm handler, and how to add an alarm. It first calls alarm_init to initialize the alarm library and sets the callback to handle an alarm event it received. In create_test fucnction, the application add an alarm which will be expired in one minute from it execute and will expire everyday at same time. 
  *
- * 
+ * The following code shows how to initialize alarm library, how to register the alarm handler, and how to add an alarm. It first calls alarm_init to initialize the alarm library and sets the callback to handle an alarm event it received. In create_test fucnction, the application add an alarm which will be expired in one minute from it execute and will expire everyday at same time.
+ *
+ *
  * @code
 #include<stdio.h>
 #include<stdlib.h>
@@ -66,12 +67,12 @@
 
 #include "alarm.h"
 
-int callback(alarm_id_t alarm_id, void *user_param) 
+int callback(alarm_id_t alarm_id, void *user_param)
 {
 	int error;
 	time_t current_time;
 	time(&current_time);
-	
+
 	printf("Alarm[%d] has expired at %s\n", alarm_id, ctime(&current_time));
 	return 0;
 }
@@ -94,7 +95,7 @@ void create_test()
 
 	test_time.year = current_tm.tm_year+1900;
 	test_time.month = current_tm.tm_mon+1;
-	test_time.day = current_tm.tm_mday;   
+	test_time.day = current_tm.tm_mday;
 	test_time.hour = current_tm.tm_hour;
 	test_time.min = current_tm.tm_min+1;
 	test_time.sec = 0;
@@ -104,32 +105,32 @@ void create_test()
 	ALARM_WDAY_MONDAY| \
 	ALARM_WDAY_TUESDAY|ALARM_WDAY_WEDNESDAY| \
 	ALARM_WDAY_THURSDAY|ALARM_WDAY_FRIDAY );
-	
+
 	alarmmgr_set_type(alarm_info,ALARM_TYPE_VOLATILE);
 	alarmmgr_add_alarm_with_localtime(alarm_info,NULL,&alarm_id);
-	
+
 	if(result != ALARMMGR_RESULT_SUCCESS)
 		printf("fail to alarmmgr_create : error_code : %d\n",result);
-       
+
 }
 
-int main(int argc, char** argv) 
+int main(int argc, char** argv)
 {
 	int error_code;
 	GMainLoop *mainloop;
 	int result;
 	g_type_init();
-	
+
 	mainloop = g_main_loop_new(NULL, FALSE);
 	result = alarmmgr_init("org.tizen.test");
 
 	if(result != ALARMMGR_RESULT_SUCCESS) {
 		printf("fail to alarmmgr_init : error_code : %d\n",result);
-	} 
+	}
 	else {
 		result = alarmmgr_set_cb(callback,NULL);
 		if(result != ALARMMGR_RESULT_SUCCESS) {
-			printf("fail to alarmmgr_set_cb : error_code : 
+			printf("fail to alarmmgr_set_cb : error_code :
 							%d\n",result);
 		}
 		else {
@@ -144,7 +145,7 @@ int main(int argc, char** argv)
 */
 
 /**
- * @addtogroup Alarm
+ * @addtogroup AlarmManager
  * @{
  */
 
@@ -192,7 +193,7 @@ typedef enum {
 		ERR_ALARM_INVALID_TIME,	/**<Invalid time. */
 		ERR_ALARM_INVALID_DATE,	/**<Invalid date. */
 		ERR_ALARM_NO_SERVICE_NAME,
-				    /**<there is no alarm service 
+				    /**<there is no alarm service
 					for this applicaation. */
 		ERR_ALARM_INVALID_TYPE,  /*Invalid type*/
 		ERR_ALARM_NO_PERMISSION, /*No permission*/
@@ -204,9 +205,9 @@ typedef enum {
 *  This enumeration has repeat mode of alarm
 */
 typedef enum {
-	ALARM_REPEAT_MODE_ONCE = 0,	/**<once : the alarm will be expired 
+	ALARM_REPEAT_MODE_ONCE = 0,	/**<once : the alarm will be expired
 					only one time. */
-	ALARM_REPEAT_MODE_REPEAT,	/**<repeat : the alarm will be expired 
+	ALARM_REPEAT_MODE_REPEAT,	/**<repeat : the alarm will be expired
 					repeatly*/
 	ALARM_REPEAT_MODE_WEEKLY,	/**<weekly*/
 	ALARM_REPEAT_MODE_MONTHLY,	/**< monthly*/
@@ -215,8 +216,15 @@ typedef enum {
 } alarm_repeat_mode_t;
 
 
+typedef enum {
+	QUANTUMIZE = 0,
+	CUT_OFF,
+} periodic_method_e;
+
+
 #define ALARM_TYPE_DEFAULT	0x0	/*< non volatile */
 #define ALARM_TYPE_VOLATILE	0x02	/*< volatile */
+#define ALARM_TYPE_NOLAUNCH 0x04	/*<without launch */
 
 
 /**
@@ -237,16 +245,16 @@ typedef struct alarm_info_t alarm_entry_t;
 
 /**
  *
- * This function initializes alarm library. It connects to system bus and registers the application's service name. 
+ * This function initializes alarm library. It connects to system bus and registers the application's service name.
  *
  * @param	[in]	pkg_name	a package of application
  *
- * @return On success, ALARMMGR_RESULT_SUCCESS is returned. On error, a negative number is returned 
+ * @return On success, ALARMMGR_RESULT_SUCCESS is returned. On error, a negative number is returned
  *
  * @pre None.
  * @post None.
  * @see None.
- * @remark An application must call this function before using other alarm APIs. 
+ * @remark An application must call this function before using other alarm APIs.
  * @par Sample code:
  * @code
 #include <alarm.h>
@@ -271,7 +279,32 @@ typedef struct alarm_info_t alarm_entry_t;
  * @endcode
  * @limo
  */
-int alarmmgr_init(const char *pkg_name);
+int alarmmgr_init(const char *appid);
+
+/**
+ *
+ * This function de-initializes alarm library. It un-registers the application's service name and dis-connects from system bus.
+ *
+ * @param       None
+ *
+ * @return 	None
+ *
+ * @pre		Alarm manager is initialized
+ * @post 	Alarm manager is de-initialized
+ * @remark An application must call this function once it is done with alarmmanger usage
+ * @par Sample code:
+ * @code
+#include <alarm.h>
+
+...
+{
+	// Initialize alarmmanager
+	// Set alarm
+
+        alarmmgr_fini() ;
+}
+ * @endcode
+ */
 
 void alarmmgr_fini();
 
@@ -283,20 +316,20 @@ void alarmmgr_fini();
  * @param	[in]	handler	Callback function
  * @param	[in]	user_param	User Parameter
  *
- * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure. 
+ * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure.
  *
  * @pre alarmmgr_init().
  * @post None.
  * @see None.
- * @remark	An application can have only one alarm handler. If an application 
+ * @remark	An application can have only one alarm handler. If an application
  *          calls this function more than one times, the handler regitered during  the
- *          last call of this funiction will be called when an alarm event has occured. 
+ *          last call of this funiction will be called when an alarm event has occured.
  * @par Sample code:
  * @code
 #include <alarm.h>
 ...
 
-// Call back function 
+// Call back function
 int callback(alarm_id_t alarm_id,void* user_param)
 {
         time_t current_time;
@@ -333,7 +366,7 @@ int alarmmgr_set_cb(alarm_cb_t handler, void *user_param);
 /**
  * This function creates a new alarm entry, will not be known to the server until alarmmgr_add_alarm is called.
  *
- * @return	This function returns the pointer of alarm_entry_t 
+ * @return	This function returns the pointer of alarm_entry_t
  *
  * @pre None.
  * @post None.
@@ -355,7 +388,7 @@ int alarmmgr_set_cb(alarm_cb_t handler, void *user_param);
 	}
 	else
 	{
-		 //alarmmgr_create_alarm () failed 
+		 //alarmmgr_create_alarm () failed
 	}
 }
 
@@ -367,11 +400,11 @@ alarm_entry_t *alarmmgr_create_alarm(void);
 
 
 /**
- * This function frees an alarm entry. 
+ * This function frees an alarm entry.
  *
  * @param	[in]	alarm	alarm entry
  *
- * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure. 
+ * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure.
  *
  * @pre None.
  * @post None.
@@ -381,20 +414,20 @@ alarm_entry_t *alarmmgr_create_alarm(void);
  * @par Sample code:
  * @code
 #include <alarm.h>
- 
+
 ...
  {
 	 int ret_val = ALARMMGR_RESULT_SUCCESS;
 	 alarm_entry_t* alarm;
- 
+
 	 alarm = alarmmgr_create_alarm() ;
 	 if(alarm == NULL)
 	 {
-		  //alarmmgr_create_alarm () failed 
+		  //alarmmgr_create_alarm () failed
 	 }
 	 else
 		 {
- 
+
 			 ret_val = alarmmgr_free_alarm( alarm) ;
 			 if(ret_val == ALARMMGR_RESULT_SUCCESS)
 			 {
@@ -403,10 +436,10 @@ alarm_entry_t *alarmmgr_create_alarm(void);
 			 else
 			 {
 				 //alarmmgr_free_alarm() failed
-			 }			 
+			 }
 		 }
- } 
- 
+ }
+
  * @endcode
  * @limo
  */
@@ -419,7 +452,7 @@ int alarmmgr_free_alarm(alarm_entry_t *alarm);
  * @param	[in]	alarm	alarm entry
  * @param	[in]	time		time the alarm should first go off
  *
- * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure. 
+ * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure.
  *
  * @pre None.
  * @post None.
@@ -429,7 +462,7 @@ int alarmmgr_free_alarm(alarm_entry_t *alarm);
  * @par Sample code:
  * @code
 #include <alarm.h>
-  
+
  ...
   {
 	  int ret_val = ALARMMGR_RESULT_SUCCESS;
@@ -437,15 +470,15 @@ int alarmmgr_free_alarm(alarm_entry_t *alarm);
 	  time_t current_time;
 	  struct tm current_tm;
 	  alarm_date_t test_time;
-  
-  
+
+
 	 time(&current_time);
 	 localtime_r(&current_time, &current_tm);
-		 
+
 	 alarm = alarmmgr_create_alarm();
 	  if(alarm == NULL)
 	  {
-		   //alarmmgr_create_alarm () failed 
+		   //alarmmgr_create_alarm () failed
 	  }
 	  else {
 		test_time.year = current_tm.tm_year;
@@ -455,7 +488,7 @@ int alarmmgr_free_alarm(alarm_entry_t *alarm);
 		test_time.hour = current_tm.tm_hour;
 		test_time.min = current_tm.tm_min+1;
 		test_time.sec = 0;
-		
+
 		ret_val=alarmmgr_set_time(alarm,test_time);
 		if(ret_val == ALARMMGR_RESULT_SUCCESS)
 		{
@@ -468,7 +501,7 @@ int alarmmgr_free_alarm(alarm_entry_t *alarm);
 			  alarmmgr_free_alarm( alarm) ;
 	  }
  }
-  
+
  * @endcode
  * @limo
  */
@@ -480,35 +513,35 @@ int alarmmgr_set_time(alarm_entry_t *alarm, alarm_date_t time);
  * @param	[in]		alarm	alarm entry
  * @param	[out]	time		time the alarm should first go off
  *
- * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure. 
+ * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure.
  *
  * @pre None.
  * @post None.
  * @see None.
- * @remark	But an application does not need to specify year, month, and day field of alarm_info. If an application sets 
+ * @remark	But an application does not need to specify year, month, and day field of alarm_info. If an application sets
  * 			those fields with zero, the function sets them with proper values.
  *
  * @par Sample code:
  * @code
 #include <alarm.h>
-   
+
  ...
  {
 	 int ret_val = ALARMMGR_RESULT_SUCCESS;
 	 alarm_entry_t* alarm;
- 
+
 	 time_t current_time;
 		struct tm current_tm;
 	 alarm_date_t test_time;
 	 alarm_date_t new_time;
- 
- 
+
+
 		time(&current_time);
 		localtime_r(&current_time, &current_tm);
-		
+
 		alarm = alarmmgr_create_alarm();
 	 if(alarm == NULL) {
-		  //alarmmgr_create_alarm () failed 
+		  //alarmmgr_create_alarm () failed
 	 }
 	 else {
 		test_time.year = current_tm.tm_year;
@@ -544,18 +577,18 @@ int alarmmgr_set_time(alarm_entry_t *alarm, alarm_date_t time);
 int alarmmgr_get_time(const alarm_entry_t *alarm, alarm_date_t *time);
 
 /**
- * This function sets an alarm repeat mode 
+ * This function sets an alarm repeat mode
  *
  * @param	[in]	alarm	alarm entry
- * @param	[in]	repeat_mode	one of ALARM_REPEAT_MODE_ONCE, ALARM_REPEAT_MODE_REPEAT, 
+ * @param	[in]	repeat_mode	one of ALARM_REPEAT_MODE_ONCE, ALARM_REPEAT_MODE_REPEAT,
  *								ALARM_REPEAT_MODE_WEEKLY, ALARM_REPEAT_MODE_MONTHLY or ALARM_REPEAT_MODE_ANNUALLY.
  * @param	[in]	repeat_value	the ALARM_REPEAT_MODE_REPEAT mode : interval between subsequent repeats of the alarm.
  *								the ALARM_REPEAT_MODE_WEEKLY mode : days of a week
- *								(ALARM_WDAY_SUNDAY, ALARM_WDAY_MONDAY, ALARM_WDAY_TUESDAY, 	ALARM_WDAY_WEDNESDAY, 
+ *								(ALARM_WDAY_SUNDAY, ALARM_WDAY_MONDAY, ALARM_WDAY_TUESDAY, 	ALARM_WDAY_WEDNESDAY,
  *								ALARM_WDAY_THURSDAY, 	ALARM_WDAY_FRIDAY, ALARM_WDAY_SATURDAY)
  *								the others : this parameter is ignored.
  *
- * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure. 
+ * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure.
  *
  * @pre None.
  * @post None.
@@ -565,29 +598,29 @@ int alarmmgr_get_time(const alarm_entry_t *alarm, alarm_date_t *time);
  * @par Sample code:
  * @code
 #include <alarm.h>
-	
+
   ...
  {
 	 int ret_val = ALARMMGR_RESULT_SUCCESS;
-	 alarm_entry_t* alarm;	 
-	 alarm_repeat_mode_t repeat_mode =ALARM_REPEAT_MODE_WEEKLY;  
+	 alarm_entry_t* alarm;
+	 alarm_repeat_mode_t repeat_mode =ALARM_REPEAT_MODE_WEEKLY;
 	 int interval = ALARM_WDAY_MONDAY; //| ALARM_WDAY_TUESDAY|
 		ALARM_WDAY_WEDNESDAY| ALARM_WDAY_THURSDAY|ALARM_WDAY_FRIDAY ;
- 
- 
+
+
 	 alarm = alarmmgr_create_alarm();
 	 if(alarm == NULL)
 	 {
-		  //alarmmgr_create_alarm () failed 
+		  //alarmmgr_create_alarm () failed
 	 }
 	 else
 		 {
 			   ret_val = alarmmgr_set_repeat_mode
 					(alarm, repeat_mode,interval);
- 
+
 			 if(ret_val == ALARMMGR_RESULT_SUCCESS)
 			 {
-				  //alarmmgr_set_repeat_mode() is successful	
+				  //alarmmgr_set_repeat_mode() is successful
 			 }
 			 else
 			 {
@@ -596,7 +629,7 @@ int alarmmgr_get_time(const alarm_entry_t *alarm, alarm_date_t *time);
 			 alarmmgr_free_alarm( alarm) ;
 		 }
  }
- 
+
  * @endcode
  * @limo
  */
@@ -605,18 +638,18 @@ int alarmmgr_set_repeat_mode(alarm_entry_t *alarm,
 				     int repeat_value);
 
 /**
- * This function gives an application an alarm mode 
+ * This function gives an application an alarm mode
  *
  * @param	[in]		alarm	alarm entry
- * @param	[out]	repeat_mode	one of ALARM_REPEAT_MODE_ONCE, ALARM_REPEAT_MODE_REPEAT, 
+ * @param	[out]	repeat_mode	one of ALARM_REPEAT_MODE_ONCE, ALARM_REPEAT_MODE_REPEAT,
  *									ALARM_REPEAT_MODE_WEEKLY, ALARM_REPEAT_MODE_MONTHLY or ALARM_REPEAT_MODE_ANNUALLY.
  * @param	[out]	repeat_value	the ALARM_REPEAT_MODE_REPEAT mode : interval between subsequent repeats of the alarm.
  *									the ALARM_REPEAT_MODE_WEEKLY mode : days of a week
- *									(ALARM_WDAY_SUNDAY, ALARM_WDAY_MONDAY, ALARM_WDAY_TUESDAY, 	ALARM_WDAY_WEDNESDAY, 
+ *									(ALARM_WDAY_SUNDAY, ALARM_WDAY_MONDAY, ALARM_WDAY_TUESDAY, 	ALARM_WDAY_WEDNESDAY,
  *									ALARM_WDAY_THURSDAY, 	ALARM_WDAY_FRIDAY, ALARM_WDAY_SATURDAY)
  *									the others : this parameter is ignored.
  *
- * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure. 
+ * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure.
  *
  * @pre None.
  * @post None.
@@ -626,23 +659,23 @@ int alarmmgr_set_repeat_mode(alarm_entry_t *alarm,
  * @par Sample code:
  * @code
 #include <alarm.h>
-	 
+
    ...
  {
 	 int ret_val = ALARMMGR_RESULT_SUCCESS;
 	 alarm_entry_t* alarm;
 	 alarm_repeat_mode_t repeat;
 	 int interval;
- 
+
 	 alarm = alarmmgr_create_alarm();
 	 if(alarm == NULL)
 	 {
-		 //alarmmgr_create_alarm () failed 
+		 //alarmmgr_create_alarm () failed
 	 }
 	 else {
 		ret_val =alarmmgr_get_repeat_mode
 					(alarm, &repeat, &interval) ;
-			 if(ret_val == ALARMMGR_RESULT_SUCCESS 
+			 if(ret_val == ALARMMGR_RESULT_SUCCESS
 			&& repeat == ALARM_REPEAT_MODE_ONCE) {
 				//alarmmgr_get_repeat_mode() is successful
 			}
@@ -661,13 +694,13 @@ int alarmmgr_get_repeat_mode(const alarm_entry_t *alarm,
 				     int *repeat_value);
 
 /**
- * This function sets an alarm mode 
+ * This function sets an alarm mode
  *
  * @param	[in]	alarm	alarm entry
  * @param	[in]	alarm_type	one of ALARM_TYPE_DEFAULT : After the device reboot, the alarm still works.
  * 							ALARM_TYPE_VOLATILE : After the device reboot, the alarm does not work.
  *
- * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure. 
+ * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure.
  *
  * @pre None.
  * @post None.
@@ -678,23 +711,23 @@ int alarmmgr_get_repeat_mode(const alarm_entry_t *alarm,
  * @code
 #include <alarm.h>
 
-   ...	
+   ...
  {
 	 int ret_val = ALARMMGR_RESULT_SUCCESS;
 	 alarm_entry_t* alarm;
 	 int alarm_type = ALARM_TYPE_VOLATILE;
-  
+
 	 alarm = alarmmgr_create_alarm();
 	 if(alarm == NULL)
 	 {
-		  //alarmmgr_create_alarm () failed 
+		  //alarmmgr_create_alarm () failed
 	 }
 	 else
-		 {		 
+		 {
 			 ret_val = alarmmgr_set_type(alarm,  alarm_type);
 			 if(ret_val == ALARMMGR_RESULT_SUCCESS)
 			 {
-				  //alarmmgr_set_type() is successful	
+				  //alarmmgr_set_type() is successful
 			 }
 			 else
 			 {
@@ -703,19 +736,19 @@ int alarmmgr_get_repeat_mode(const alarm_entry_t *alarm,
 			 alarmmgr_free_alarm( alarm) ;
 		 }
  }
-  
+
  * @endcode
  * @limo
  */
 int alarmmgr_set_type(alarm_entry_t *alarm, int alarm_type);
 
 /**
- * This function gives an application an alarm mode 
+ * This function gives an application an alarm mode
  *
  * @param	[in]		alarm	alarm entry
  * @param	[out]	alarm_type	one of ALARM_TYPE_DEFAULT, ALARM_TYPE_VOLATILE
  *
- * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure. 
+ * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure.
  *
  * @pre None.
  * @post None.
@@ -726,19 +759,19 @@ int alarmmgr_set_type(alarm_entry_t *alarm, int alarm_type);
  * @code
 #include <alarm.h>
 
-   ...		
+   ...
  {
 	int ret_val = ALARMMGR_RESULT_SUCCESS;
-	alarm_entry_t* alarm; 
+	alarm_entry_t* alarm;
 	int alarm_type;
- 
+
 	alarm = alarmmgr_create_alarm();
 	if(alarm == NULL) {
 		//alarmmgr_create_alarm () failed
 	}
 	else {
 		ret_val = alarmmgr_get_type(  alarm, &alarm_type);
-		if(ret_val == ALARMMGR_RESULT_SUCCESS && alarm_type 
+		if(ret_val == ALARMMGR_RESULT_SUCCESS && alarm_type
 						== ALARM_TYPE_DEFAULT ) {
 			//alarmmgr_get_type() is successful
 		}
@@ -748,18 +781,18 @@ int alarmmgr_set_type(alarm_entry_t *alarm, int alarm_type);
 		alarmmgr_free_alarm( alarm) ;
 	}
  }
-   
+
  * @endcode
  * @limo
  */
 int alarmmgr_get_type(const alarm_entry_t *alarm, int *alarm_type);
 
 /**
- * This function adds an alarm entry to the server.	
+ * This function adds an alarm entry to the server.
  * Server will remember this entry, and generate alarm events for it when necessary.
  * Server will call app-svc interface to sent notification to destination application. Destination information
  * should be available in the input bundle.
- * Alarm entries registered with the server cannot be changed.  
+ * Alarm entries registered with the server cannot be changed.
  * Remove from server before changing.
  * Before the application calls alarmmgr_add_alarm_appsvc_with_localtime(), the application have to call alarmmgr_set_time().
  * The time set is localtime.
@@ -769,9 +802,9 @@ int alarmmgr_get_type(const alarm_entry_t *alarm, int *alarm_type);
  *
  * @param	[in]		alarm		the entry of an alarm to be created.
  * @param	[in]		bundle_data	bundle which contains information about the destination.
- * @param	[out] 		alarm_id	the id of the alarm added. 
+ * @param	[out] 		alarm_id	the id of the alarm added.
  *
- * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure. 
+ * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure.
  *
  * @pre None.
  * @post None.
@@ -782,7 +815,7 @@ int alarmmgr_get_type(const alarm_entry_t *alarm, int *alarm_type);
  * @code
 #include <alarm.h>
 
-   ...	  
+   ...
 {
     time_t current_time;
     struct tm current_tm;
@@ -809,18 +842,18 @@ int alarmmgr_get_type(const alarm_entry_t *alarm, int *alarm_type);
 
     printf("current time: %s\n", ctime(&current_time));
     localtime_r(&current_time, &current_tm);
-    
+
     alarm_info = alarmmgr_create_alarm();
-    
-    test_time.year = current_tm.tm_year;                 
-			test_time.month = current_tm.tm_mon;                
-			test_time.day = current_tm.tm_mday;                  
-                                             
+
+    test_time.year = current_tm.tm_year;
+			test_time.month = current_tm.tm_mon;
+			test_time.day = current_tm.tm_mday;
+
 			test_time.hour = current_tm.tm_hour;
 			test_time.min = current_tm.tm_min+1;
 			test_time.sec = 5;
 
-        
+
     alarmmgr_set_time(alarm_info,test_time);
     alarmmgr_set_repeat_mode(alarm_info,ALARM_REPEAT_MODE_WEEKLY,ALARM_WDAY_MONDAY| \
 		ALARM_WDAY_TUESDAY|ALARM_WDAY_WEDNESDAY| \
@@ -844,9 +877,9 @@ int alarmmgr_get_type(const alarm_entry_t *alarm, int *alarm_type);
 int alarmmgr_add_alarm_appsvc_with_localtime(alarm_entry_t *alarm,void *bundle_data, alarm_id_t *alarm_id);
 
 /**
- * This function adds an alarm entry to the server.	
+ * This function adds an alarm entry to the server.
  * Server will remember this entry, and generate alarm events for it when necessary.
- * Alarm entries registered with the server cannot be changed.  
+ * Alarm entries registered with the server cannot be changed.
  * Remove from server before changing.
  * Before the application calls alarmmgr_add_alarm_with_localtime(), the application have to call alarmmgr_set_time().
  * The time set is localtime.
@@ -856,9 +889,9 @@ int alarmmgr_add_alarm_appsvc_with_localtime(alarm_entry_t *alarm,void *bundle_d
  *
  * @param	[in]		alarm		the entry of an alarm to be created.
  * @param	[in]		destination	the packname of application that the alarm will be expired.
- * @param	[out] 	alarm_id		the id of the alarm added. 
+ * @param	[out] 	alarm_id		the id of the alarm added.
  *
- * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure. 
+ * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure.
  *
  * @pre None.
  * @post None.
@@ -869,53 +902,53 @@ int alarmmgr_add_alarm_appsvc_with_localtime(alarm_entry_t *alarm,void *bundle_d
  * @code
 #include <alarm.h>
 
-   ...	  
+   ...
 {
 	int ret_val = ALARMMGR_RESULT_SUCCESS;
-	alarm_entry_t* alarm; 
-	const char* destination = NULL; 
+	alarm_entry_t* alarm;
+	const char* destination = NULL;
 	alarm_id_t alarm_id;
- 
+
 	time_t current_time;
 	struct tm current_tm;
 	alarm_date_t test_time;
- 
+
 	const char* pkg_name = "org.tizen.test";
- 
+
 	g_type_init();
- 
+
 	ret_val =alarmmgr_init(pkg_name) ;
 	if(ret_val != ALARMMGR_RESULT_SUCCESS) {
 		//alarmmgr_init () failed
 		return;
 	}
- 
+
 	time(&current_time);
- 
+
 	printf("current time: %s\n", ctime(&current_time));
 	localtime_r(&current_time, &current_tm);
- 
+
 	alarm = alarmmgr_create_alarm();
-	
+
 	test_time.year = 0;
 	test_time.month = 0;test_time.day = 0;
-	
+
 	test_time.hour = current_tm.tm_hour;
 	test_time.min = current_tm.tm_min+1;
 	test_time.sec = 0;
- 
-		 
+
+
 	 alarmmgr_set_time(alarm,test_time);
 	 alarmmgr_set_repeat_mode(alarm,ALARM_REPEAT_MODE_WEEKLY, \
 					ALARM_WDAY_MONDAY);
 	 alarmmgr_set_type(alarm,ALARM_TYPE_VOLATILE);
- 
-		 
+
+
 	ret_val=alarmmgr_add_alarm_with_localtime(alarm,destination,&alarm_id);
- 
+
 	 if(ret_val == ALARMMGR_RESULT_SUCCESS)
 	 {
-		  //alarmmgr_add_alarm_with_localtime() is successful	
+		  //alarmmgr_add_alarm_with_localtime() is successful
 	 }
 	 else
 	 {
@@ -932,11 +965,11 @@ int alarmmgr_add_alarm_with_localtime(alarm_entry_t *alarm,
 
 
 /**
- * This function adds an alarm entry to the server.	
+ * This function adds an alarm entry to the server.
  * Server will remember this entry, and generate alarm events for it when necessary.
  * Server will call app-svc interface to sent notification to destination application. Destination information
  * should be available in the input bundle.
- * Alarm entries registered with the server cannot be changed.  
+ * Alarm entries registered with the server cannot be changed.
  * Remove from server before changing.
  * After the trigger_at_time seconds from now, the alarm will be expired.
  * If the interval is zero, the repeat_mode is ALARM_REPEAT_MODE_ONCE.
@@ -944,12 +977,12 @@ int alarmmgr_add_alarm_with_localtime(alarm_entry_t *alarm,
  * The id of the new alarm will be copied to  alarm_id if the fuction successes to create an alarm.
  *
  * @param	[in]		alarm_type		one of ALARM_TYPE_DEFAULT, ALARM_TYPE_VOLATILE
- * @param	[in]		trigger_at_time	time interval to be triggered from now(sec). an alarm also will be expired at triggering time.	
- * @param	[in]		interval		Interval between subsequent repeats of the alarm	
+ * @param	[in]		trigger_at_time	time interval to be triggered from now(sec). an alarm also will be expired at triggering time.
+ * @param	[in]		interval		Interval between subsequent repeats of the alarm
  * @param	[in]		bundle_data		bundle which contains information about the destination.
- * @param	[out] 	alarm_id			the id of the alarm added. 
+ * @param	[out] 	alarm_id			the id of the alarm added.
  *
- * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure. 
+ * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure.
  *
  * @pre None.
  * @post None.
@@ -960,7 +993,7 @@ int alarmmgr_add_alarm_with_localtime(alarm_entry_t *alarm,
  * @code
 #include <alarm.h>
 
- ...	  
+ ...
  {
  		int result;
 		alarm_id_t alarm_id;
@@ -983,7 +1016,7 @@ int alarmmgr_add_alarm_with_localtime(alarm_entry_t *alarm,
 			printf("Unable to add alarm. Alarmmgr alarm no is %d\n", result);
 		else
 			printf("Alarm added successfully. Alarm Id is %d\n", alarm_id);
-		return;	
+		return;
 
  }
 
@@ -996,9 +1029,9 @@ int alarmmgr_add_alarm_appsvc(int alarm_type, time_t trigger_at_time,
 
 
 /**
- * This function adds an alarm entry to the server.	
+ * This function adds an alarm entry to the server.
  * Server will remember this entry, and generate alarm events for it when necessary.
- * Alarm entries registered with the server cannot be changed.  
+ * Alarm entries registered with the server cannot be changed.
  * Remove from server before changing.
  * After the trigger_at_time seconds from now, the alarm will be expired.
  * If the interval is zero, the repeat_mode is ALARM_REPEAT_MODE_ONCE.
@@ -1006,12 +1039,12 @@ int alarmmgr_add_alarm_appsvc(int alarm_type, time_t trigger_at_time,
  * The id of the new alarm will be copied to  alarm_id if the fuction successes to create an alarm.
  *
  * @param	[in]		alarm_type		one of ALARM_TYPE_DEFAULT, ALARM_TYPE_VOLATILE
- * @param	[in]		trigger_at_time	time interval to be triggered from now(sec). an alarm also will be expired at triggering time.	
- * @param	[in]		interval			Interval between subsequent repeats of the alarm	
+ * @param	[in]		trigger_at_time	time interval to be triggered from now(sec). an alarm also will be expired at triggering time.
+ * @param	[in]		interval			Interval between subsequent repeats of the alarm
  * @param	[in]		destination		the packname of application that the alarm will be expired.
- * @param	[out] 	alarm_id			the id of the alarm added. 
+ * @param	[out] 	alarm_id			the id of the alarm added.
  *
- * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure. 
+ * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure.
  *
  * @pre None.
  * @post None.
@@ -1022,32 +1055,32 @@ int alarmmgr_add_alarm_appsvc(int alarm_type, time_t trigger_at_time,
  * @code
 #include <alarm.h>
 
- ...	  
+ ...
  {
 	 int ret_val = ALARMMGR_RESULT_SUCCESS;
-	 
+
 	 int alarm_type = ALARM_TYPE_VOLATILE;
-	 time_t trigger_at_time = 10; 
-	 time_t interval = 10; 
+	 time_t trigger_at_time = 10;
+	 time_t interval = 10;
 	 const char* destination = NULL;
 	 alarm_id_t alarm_id;
- 
+
 	 const char* pkg_name = "org.tizen.test";
- 
+
 	 g_type_init();
- 
+
 	 ret_val =alarmmgr_init(pkg_name) ;
 	 if(ret_val != ALARMMGR_RESULT_SUCCESS)
 	 {
 		  //alarmmgr_init () failed
 		  return;
 	 }
- 
-	 ret_val = alarmmgr_add_alarm( alarm_type, trigger_at_time, interval, 
+
+	 ret_val = alarmmgr_add_alarm( alarm_type, trigger_at_time, interval,
 					destination, &alarm_id);
 	 if(ret_val == ALARMMGR_RESULT_SUCCESS)
 	 {
-		  //alarmmgr_add_alarm() is successful	
+		  //alarmmgr_add_alarm() is successful
 	 }
 	 else
 	 {
@@ -1066,9 +1099,9 @@ int alarmmgr_add_alarm(int alarm_type, time_t trigger_at_time,
 /**
  * This function deletes the alarm associated with the given alarm_id.
  *
- * @param	[in]	alarm_id	Specifies the ID of the alarm to be deleted. 
+ * @param	[in]	alarm_id	Specifies the ID of the alarm to be deleted.
  *
- * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure. 
+ * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure.
  *
  * @pre None.
  * @post None.
@@ -1079,28 +1112,28 @@ int alarmmgr_add_alarm(int alarm_type, time_t trigger_at_time,
  * @code
 #include <alarm.h>
 
- ...	 
+ ...
  {
 	int ret_val = ALARMMGR_RESULT_SUCCESS;
 	int alarm_type = ALARM_TYPE_VOLATILE;
-	time_t trigger_at_time = 10; 
-	time_t interval = 10; 
+	time_t trigger_at_time = 10;
+	time_t interval = 10;
 	const char* destination = NULL;
 	alarm_id_t alarm_id;
- 
+
 	const char* pkg_name = "org.tizen.test";
- 
+
 	g_type_init();
- 
+
 	ret_val =alarmmgr_init(pkg_name) ;
 	if(ret_val != ALARMMGR_RESULT_SUCCESS) {
 		//alarmmgr_init () failed
 		return;
 	}
 
-	alarmmgr_add_alarm( alarm_type,  trigger_at_time, interval, 
+	alarmmgr_add_alarm( alarm_type,  trigger_at_time, interval,
 						destination, &alarm_id);
- 
+
 	ret_val =alarmmgr_remove_alarm( alarm_id) ;
 	if(ret_val == ALARMMGR_RESULT_SUCCESS) {
 		/alarmmgr_remove_alarm() is successful
@@ -1109,11 +1142,18 @@ int alarmmgr_add_alarm(int alarm_type, time_t trigger_at_time,
 		//alarmmgr_remove_alarm() failed
 	}
  }
- 
+
  * @endcode
  * @limo
  */
 int alarmmgr_remove_alarm(alarm_id_t alarm_id);
+
+/**
+ * This function deletes all registered alarms
+ *
+ * @return	This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure.
+ */
+int alarmmgr_remove_all(void);
 
 /**
  * This function gives a list of alarm ids that the application adds to the server.
@@ -1121,7 +1161,7 @@ int alarmmgr_remove_alarm(alarm_id_t alarm_id);
  * @param	[in]	fn			a user callback function
  * @param	[in]	user_param	user parameter
  *
- * @return			This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure. 
+ * @return			This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure.
  *
  * @pre None.
  * @post None.
@@ -1131,7 +1171,7 @@ int alarmmgr_remove_alarm(alarm_id_t alarm_id);
  * @par Sample code:
  * @code
 #include <alarm.h>
- 
+
  int callback_2(alarm_id_t id, void* user_param)
  {
 	 int* n = (int*)user_param;
@@ -1140,26 +1180,26 @@ int alarmmgr_remove_alarm(alarm_id_t alarm_id);
 	 return 0;
  }
 
-... 
+...
  {
 	 int ret_val = ALARMMGR_RESULT_SUCCESS;
 	 int n = 1;
- 
+
 	 const char* pkg_name = "org.tizen.test";
- 
+
 	 g_type_init();
- 
+
 	 ret_val =alarmmgr_init(pkg_name) ;
 	 if(ret_val != ALARMMGR_RESULT_SUCCESS)
 	 {
 		  //alarmmgr_init() failed
 		  return;
 	 }
- 
+
 	 ret_val = alarmmgr_enum_alarm_ids( callback_2, (void*)&n) ;
 	 if(ret_val == ALARMMGR_RESULT_SUCCESS)
 	 {
-		   //alarmmgr_enum_alarm_ids() is successful	
+		   //alarmmgr_enum_alarm_ids() is successful
 	 }
 	 else
 	 {
@@ -1175,12 +1215,12 @@ int alarmmgr_enum_alarm_ids(alarm_enum_fn_t fn, void *user_param);
 
 /**
  * This function gets the information of the alarm assosiated with alarm_id to alarm_info. The application
- * must allocate alarm_info before calling this function.  
+ * must allocate alarm_info before calling this function.
  *
  * @param	[in] 	alarm_id		the id of the alarm
  * @param	[out] 	alarm	the buffer alarm informaiton will be copied to
- * 
- * @return			This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure. 
+ *
+ * @return			This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure.
  *
  * @pre None.
  * @post None.
@@ -1195,29 +1235,29 @@ int alarmmgr_enum_alarm_ids(alarm_enum_fn_t fn, void *user_param);
  {
 	int ret_val = ALARMMGR_RESULT_SUCCESS;
 	int alarm_type = ALARM_TYPE_VOLATILE;
-	time_t trigger_at_time = 10; 
-	time_t interval = ALARM_WDAY_SUNDAY; 
+	time_t trigger_at_time = 10;
+	time_t interval = ALARM_WDAY_SUNDAY;
 	const char* destination = NULL;
 	alarm_id_t alarm_id;
 
 	alarm_entry_t *alarm;
 
 	const char* pkg_name = "org.tizen.test_get_info1";
-	 
+
 	g_type_init();
- 
+
 	ret_val =alarmmgr_init(pkg_name) ;
 	if(ret_val != ALARMMGR_RESULT_SUCCESS) {
 		//alarmmgr_init() failed
 		return;
-	}	 
+	}
 	ret_val = alarmmgr_add_alarm( alarm_type,trigger_at_time,interval,
 			destination, &alarm_id);
 
 	if(ret_val != ALARMMGR_RESULT_SUCCESS) {
 		//alarmmgr_add_alarm() failed
 		return;
-	} 
+	}
 	ret_val = alarmmgr_get_info(alarm_id, alarm);
 	if(ret_val == ALARMMGR_RESULT_SUCCESS) {
 		//alarmmgr_get_info() is successful
@@ -1296,7 +1336,20 @@ int main(int argc,char **argv {
  */
 void *alarmmgr_get_alarm_appsvc_info(alarm_id_t alarm_id, int *return_code);
 
-
+/**
+ * This function gets the scheduled time of the alarm assosiated with alarm_id.
+ *
+ * @param	[in] 	alarm_id		the id of the alarm
+ * @param	[out] 	duetime	the scheduled time of the alarm
+ *
+ * @return			This function returns ALARMMGR_RESULT_SUCCESS on success or a negative number on failure.
+ *
+ * @pre None.
+ * @post None.
+ * @see None
+ * @remark  None.
+ */
+ int alarmmgr_get_next_duetime(alarm_id_t alarm_id, time_t* duetime);
 
 /**
  * This function sets power RTC (which can power on the system).
@@ -1331,18 +1384,39 @@ int main(int argc,char **argv {
  */
 int alarmmgr_set_rtc_time(alarm_date_t *time);
 
+/**
+ * This function changes the system time which tranferred by other module
+ * @param	[in]		new_time		epoch time to be set
+ *
+ * @return	@c ALARMMGR_RESULT_SUCCESS on success,
+ *			otherwise a negative error value
+ * @retval	#ALARMMGR_RESULT_SUCCESS	Successful
+ * @retval	#ERR_ALARM_SYSTEM_FAIL		System failure
+ */
+int alarmmgr_set_systime(int new_time);
 
 /**
- * @}
+ * This function changes the timezone which tranferred by other module
+ * @param	[in]		tzpath_str	the path to timezone definition file
+ *
+ * @return	@c ALARMMGR_RESULT_SUCCESS on success,
+ *			otherwise a negative error value
+ * @retval	#ALARMMGR_RESULT_SUCCESS	Successful
+ * @retval	#ERR_ALARM_INVALID_PARAM	Invalid parameter
+ * @retval	#ERR_ALARM_SYSTEM_FAIL		System failure
  */
+int alarmmgr_set_timezone(char *tzpath_str);
 
 
-/**
- * @}
- */
+int alarmmgr_add_alarm_withcb(int alarm_type, time_t trigger_at_time,
+				  time_t interval, alarm_cb_t handler, void *user_param, alarm_id_t *alarm_id);
 
+int alarmmgr_add_periodic_alarm_withcb(int interval, periodic_method_e method, alarm_cb_t handler,
+		void *user_param, alarm_id_t *alarm_id);
 
-int alarmmgr_power_on(bool on_off);
+int alarmmgr_add_reference_periodic_alarm_withcb(int interval, alarm_cb_t handler,
+		void *user_param, alarm_id_t *alarm_id);
+
 
 #ifdef __cplusplus
 }

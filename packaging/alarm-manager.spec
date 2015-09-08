@@ -1,26 +1,29 @@
 Name:       alarm-manager
 Summary:    Alarm library
-Version:    0.4.53
-Release:    2
+Version:    0.4.163
+Release:    1
 Group:      System/Libraries
-License:    Apache License, Version 2.0
+License:    Apache-2.0
 Source0:    %{name}-%{version}.tar.gz
+Source1:    alarm-server.service
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 
-BuildRequires: pkgconfig(dbus-1)
+BuildRequires: cmake
 BuildRequires: pkgconfig(glib-2.0)
-BuildRequires: pkgconfig(dbus-glib-1)
-BuildRequires: pkgconfig(pmapi)
 BuildRequires: pkgconfig(dlog)
-BuildRequires: pkgconfig(heynoti)
 BuildRequires: pkgconfig(aul)
 BuildRequires: pkgconfig(bundle)
+BuildRequires: pkgconfig(sqlite3)
 BuildRequires: pkgconfig(security-server)
 BuildRequires: pkgconfig(db-util)
 BuildRequires: pkgconfig(vconf)
-BuildRequires: pkgconfig(tapi)
 BuildRequires: pkgconfig(appsvc)
+BuildRequires: pkgconfig(pkgmgr-info)
+BuildRequires: pkgconfig(gio-2.0)
+BuildRequires: pkgconfig(gio-unix-2.0)
+BuildRequires: pkgconfig(capi-system-device)
+BuildRequires: python-xml
 
 %description
 Alarm Server and devel libraries
@@ -54,21 +57,21 @@ Alarm server library (devel)
 %prep
 %setup -q
 
-# HACK_removed_dbus_glib_alarm_manager_object_info.diff
-#%patch0 -p1
-
 %build
+MAJORVER=`echo %{version} | awk 'BEGIN {FS="."}{print $1}'`
+%if 0%{?sec_build_binary_debug_enable}
+export CFLAGS="$CFLAGS -DTIZEN_DEBUG_ENABLE"
+export CXXFLAGS="$CXXFLAGS -DTIZEN_DEBUG_ENABLE"
+export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
+%endif
+%ifarch %{ix86}
+	ARCH=x86
+%else
+	ARCH=arm
+%endif
 
-export LDFLAGS+=" -Wl,--rpath=%{_libdir} -Wl,--as-needed"
+cmake . -DCMAKE_INSTALL_PREFIX=%{_prefix} -DOBS=1 -DFULLVER=%{version} -DMAJORVER=${MAJORVER} -DARCH=${ARCH}
 
-%autogen --disable-static
-
-dbus-binding-tool --mode=glib-server --prefix=alarm_manager ./alarm_mgr.xml > ./include/alarm-skeleton.h
-dbus-binding-tool --mode=glib-client --prefix=alarm_manager ./alarm_mgr.xml > ./include/alarm-stub.h
-dbus-binding-tool --mode=glib-server --prefix=alarm_client ./alarm-expire.xml > ./include/alarm-expire-skeleton.h
-dbus-binding-tool --mode=glib-client --prefix=alarm_client ./alarm-expire.xml > ./include/alarm-expire-stub.h
-
-%configure --disable-static
 make %{?jobs:-j%jobs}
 
 
@@ -76,9 +79,13 @@ make %{?jobs:-j%jobs}
 rm -rf %{buildroot}
 %make_install
 
-mkdir -p %{buildroot}/etc/init.d
-install -m 755 alarm-server_run %{buildroot}/etc/init.d
+mkdir -p %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants
+install -m 0644 %SOURCE1 %{buildroot}%{_libdir}/systemd/system/alarm-server.service
+ln -s ../alarm-server.service %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants/alarm-server.service
 
+mkdir -p %{buildroot}/usr/share/license
+cp LICENSE %{buildroot}/usr/share/license/alarm-server
+cp LICENSE %{buildroot}/usr/share/license/libalarm
 
 %post -p /sbin/ldconfig
 
@@ -86,27 +93,28 @@ install -m 755 alarm-server_run %{buildroot}/etc/init.d
 
 %post -n alarm-server
 
-heynotitool set setting_time_changed -a
-vconftool set -t int db/system/timechange 0 -i
+vconftool set -t int db/system/timechange 0 -g 5000 -s system::vconf_system
+vconftool set -t double db/system/timechange_external 0 -g 5000 -s system::vconf_system
+vconftool set -t int memory/system/timechanged 0 -i -g 5000 -s system::vconf_system
 
 chmod 755 /usr/bin/alarm-server
-chmod 755 /etc/init.d/alarm-server_run
-
-mkdir -p /etc/rc.d/rc3.d
-mkdir -p /etc/rc.d/rc5.d
-ln -s /etc/init.d/alarm-server_run /etc/rc.d/rc3.d/S80alarm-server
-ln -s /etc/init.d/alarm-server_run /etc/rc.d/rc5.d/S80alarm-server
 
 %post -n libalarm
 chmod 644 /usr/lib/libalarm.so.0.0.0
 
 
 %files -n alarm-server
+%manifest alarm-server.manifest
 %{_bindir}/*
-/etc/init.d/alarm-server_run
+%{_libdir}/systemd/system/multi-user.target.wants/alarm-server.service
+%{_libdir}/systemd/system/alarm-server.service
+/usr/share/license/alarm-server
+%attr(0755,root,root) /opt/etc/dump.d/module.d/alarmmgr_log_dump.sh
 
 %files -n libalarm
+%manifest alarm-lib.manifest
 %{_libdir}/*.so.*
+/usr/share/license/libalarm
 
 
 %files -n libalarm-devel

@@ -586,7 +586,7 @@ alarm-manager (0.3.1-6) unstable; urgency=low
 
 alarm-manager (0.3.1-5) unstable; urgency=low
 
-  * add an org.tizen.timer exception
+  * add an com.samsung.timer exception
   * Git: 165.213.180.234:/git/slp2.0/slp2.0-pkgs/alarm-manager-0
   * Tag: alarm-manager_0.3.1-5 
 

@@ -1,0 +1,23 @@
+<manifest>
+	<define>
+		<domain name="alarm-server"/>
+		<provide>
+			<label name="alarm-server::db"/>
+			<label name="alarm-server::alarm"/>
+			<label name="alarm-server::alarm-ref-periodic"/>
+			<label name="alarm-server::alarm-periodic"/>
+		</provide>
+		<request>
+			<smack request="deviced::display" type="rw"/>
+			<smack request="alarm-server::alarm-ref-periodic" type="w"/>
+			<smack request="alarm-server::alarm-periodic" type="w"/>
+			<smack request="security-server::api-cookie-check" type="w"/>
+		</request>
+	</define>
+	<assign>
+		<filesystem path="/opt/etc/dump.d/module.d/alarmmgr_log_dump.sh" label="_" exec_label="none"/>
+	</assign>
+	<request>
+		<domain name="alarm-server"/>
+	</request>
+</manifest>
