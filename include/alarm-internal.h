@@ -36,12 +36,15 @@
 #include <appsvc.h>
 #include <gio/gio.h>
 
+#include <sqlite3.h>
+
 #define INIT_ALARM_LIST_SIZE 64
 #define INIT_SCHEDULED_ALARM_LIST_SIZE 32
 #define MAX_BUNDLE_NAME_LEN 2048
 #define MAX_SERVICE_NAME_LEN 256
 #define MAX_PKG_NAME_LEN MAX_SERVICE_NAME_LEN-8
 #define MAX_PKG_ID_LEN 256
+#define MIN_INEXACT_INTERVAL 600
 
 #define SYSTEM_TIME_CHANGED "setting_time_changed"
 
@@ -118,26 +121,26 @@ typedef struct {
 } alarm_info_t;
 
 bool _send_alarm_create(alarm_context_t context, alarm_info_t *alarm,
-			 alarm_id_t *id, const char *dst_service_name,const char *dst_service_name_mod,
-			 int *error_code);
+			alarm_id_t *id, const char *dst_service_name,const char *dst_service_name_mod, int *error_code);
 bool _send_alarm_create_appsvc(alarm_context_t context, alarm_info_t *alarm_info,
 			alarm_id_t *alarm_id, bundle *b,int *error_code);
 bool _send_alarm_update(alarm_context_t context, int pid, alarm_id_t alarm_id,
-			 alarm_info_t *alarm_info, int *error_code);
-bool _send_alarm_delete(alarm_context_t context, alarm_id_t alarm_id,
-			 int *error_code);
+			alarm_info_t *alarm_info, int *error_code);
+bool _send_alarm_delete(alarm_context_t context, alarm_id_t alarm_id, int *error_code);
+bool _send_alarm_delete_all(alarm_context_t context, int *error_code);
 bool _send_alarm_get_list_of_ids(alarm_context_t context, int maxnum_of_ids,
-				  alarm_id_t *alarm_id, int *num_of_ids,
-				  int *error_code);
-bool _send_alarm_get_number_of_ids(alarm_context_t context, int *num_of_ids,
-				    int *error_code);
-bool _send_alarm_get_info(alarm_context_t context, alarm_id_t alarm_id,
-			   alarm_info_t *alarm_info, int *error_code);
+			alarm_id_t *alarm_id, int *num_of_ids, int *error_code);
+bool _send_alarm_get_number_of_ids(alarm_context_t context, int *num_of_ids, int *error_code);
+bool _send_alarm_get_info(alarm_context_t context, alarm_id_t alarm_id, alarm_info_t *alarm_info, int *error_code);
+bool _send_alarm_get_next_duetime(alarm_context_t context, alarm_id_t alarm_id, time_t* duetime, int *error_code);
+bool _send_alarm_get_all_info(alarm_context_t context, char ** db_path, int *error_code);
 bool _send_alarm_reset(alarm_context_t context, int *error_code);
-bool _remove_from_scheduled_alarm_list(int pid, alarm_id_t alarm_id);
+bool _remove_from_scheduled_alarm_list(int pid, alarm_id_t alarm_id, const char *zone);
 bool _load_alarms_from_registry();
 bundle *_send_alarm_get_appsvc_info(alarm_context_t context, alarm_id_t alarm_id, int *error_code);
 bool _send_alarm_set_rtc_time(alarm_context_t context, alarm_date_t *time, int *error_code);
+bool _send_alarm_set_time_with_propagation_delay(alarm_context_t context, unsigned int new_sec, unsigned int new_nsec, unsigned int req_sec, unsigned int req_nsec, int *error_code);
+bool _send_alarm_set_timezone(alarm_context_t context, char *tzpath_str, int *error_code);
 
 /*  alarm manager*/
 typedef struct {
@@ -167,7 +170,13 @@ typedef struct {
 	periodic_method_e method;
 	long requested_interval;
 	int is_ref;
+	GQuark zone;
 } __alarm_info_t;
+
+typedef struct {
+	char *zone;
+	sqlite3 *alarmmgr_db;
+} _zone_alarm_db_list_t;
 
 typedef struct {
 	bool used;
@@ -195,13 +204,18 @@ typedef struct {
 	alarm_id_t alarm_id;
 } __expired_alarm_t;
 
+typedef struct _bg_category_cb_info_t {
+	char *appid;
+	bool has_bg;
+} bg_category_cb_info_t;
+
 time_t _alarm_next_duetime(__alarm_info_t *alarm_info);
 bool _alarm_schedule();
 bool _clear_scheduled_alarm_list();
 bool _add_to_scheduled_alarm_list(__alarm_info_t *__alarm_info);
 
 bool _save_alarms(__alarm_info_t *__alarm_info);
-bool _delete_alarms(alarm_id_t alarm_id);
+bool _delete_alarms(alarm_id_t alarm_id, const char *zone);
 bool _update_alarms(__alarm_info_t *__alarm_info);
 
 bool _alarm_destory_timer(timer_t timer);
@@ -209,21 +223,11 @@ bool _alarm_set_timer(__alarm_server_context_t *alarm_context, int timer, time_t
 bool _alarm_disable_timer(__alarm_server_context_t alarm_context);
 bool _init_scheduled_alarm_list();
 
-int _set_rtc_time(time_t _time);
-int _set_sys_time(time_t _time);
-int _set_time(time_t _time);
+time_t _get_periodic_alarm_standard_time(void);
 
-#ifdef _DEBUG_MODE_
-#define ALARM_MGR_LOG_PRINT(FMT, ARG...)  do { printf("%5d", getpid()); printf
-	("%s() : "FMT"\n", __FUNCTION__, ##ARG); } while (false)
-#define ALARM_MGR_EXCEPTION_PRINT(FMT, ARG...)  do { printf("%5d", getpid());
-	printf("%s() : "FMT"\n", __FUNCTION__, ##ARG); } while (false)
-#define ALARM_MGR_ASSERT_PRINT(FMT, ARG...) do { printf("%5d", getpid()); printf
-	("%s() : "FMT"\n", __FUNCTION__, ##ARG); } while (false)
-#else
 #define ALARM_MGR_LOG_PRINT(FMT, ARG...) LOGD(FMT, ##ARG);
-#define ALARM_MGR_EXCEPTION_PRINT(FMT, ARG...) LOGW(FMT, ##ARG);
-#define ALARM_MGR_ASSERT_PRINT(FMT, ARG...) LOGE(FMT, ##ARG);
-#endif
+#define ALARM_MGR_WARNING_PRINT(FMT, ARG...) LOGW(FMT, ##ARG);
+#define ALARM_MGR_EXCEPTION_PRINT(FMT, ARG...) LOGE(FMT, ##ARG);
+#define ALARM_MGR_ASSERT_PRINT(FMT, ARG...) LOGF(FMT, ##ARG);
 
 #endif /*_ALARM_INTERNAL_H*/

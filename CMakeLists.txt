@@ -12,7 +12,12 @@ INCLUDE_DIRECTORIES(
 	include
 )
 
-SET(DEPS_PKGS "glib-2.0 dlog aul bundle security-server db-util appsvc pkgmgr-info vconf gio-2.0 gio-unix-2.0 capi-system-device")
+SET(DEPS_PKGS "glib-2.0 dlog aul bundle security-server db-util appsvc pkgmgr-info vconf gio-2.0 gio-unix-2.0 capi-system-device vasum eventsystem")
+
+IF(_APPFW_FEATURE_ALARM_MANAGER_MODULE_LOG)
+ADD_DEFINITIONS("-D_APPFW_FEATURE_ALARM_MANAGER_MODULE_LOG")
+ADD_DEFINITIONS("-DALARMMGR_LOG_FILE_PATH=\"${_APPFW_ALARM_MANAGER_MODULE_LOG_PATH}\"")
+ENDIF(_APPFW_FEATURE_ALARM_MANAGER_MODULE_LOG)
 
 message("${DEPS_PKGS}")
 
@@ -55,7 +60,9 @@ TARGET_LINK_LIBRARIES(${this_target} "-lrt -lm -pie")
 TARGET_LINK_LIBRARIES(${this_target} alarm)
 
 ADD_SUBDIRECTORY(src)
-ADD_SUBDIRECTORY(tool)
 
 INSTALL(TARGETS ${this_target} DESTINATION bin)
-INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/alarmmgr_log_dump.sh DESTINATION /opt/etc/dump.d/module.d)
+IF(_APPFW_FEATURE_ALARM_MANAGER_MODULE_LOG)
+	CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/alarmmgr_log_dump.sh.in ${CMAKE_CURRENT_SOURCE_DIR}/alarmmgr_log_dump.sh @ONLY)
+	INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/alarmmgr_log_dump.sh DESTINATION /opt/etc/dump.d/module.d)
+ENDIF(_APPFW_FEATURE_ALARM_MANAGER_MODULE_LOG)

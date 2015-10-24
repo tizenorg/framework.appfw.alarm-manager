@@ -32,12 +32,11 @@
 
 #include"alarm.h"
 #include"alarm-internal.h"
-#define WAKEUP_ALARM_APP_ID "org.tizen.alarm.ALARM"	/*alarm ui
-							   application's alarm's dbus_service name instead of 21 value */
 #define DST_TIME_DIFF 1
 
 extern __alarm_server_context_t alarm_context;
 extern GSList *g_scheduled_alarm_list;
+extern bool is_time_changed;
 
 static time_t __alarm_next_duetime_once(__alarm_info_t *__alarm_info);
 static time_t __alarm_next_duetime_repeat(__alarm_info_t *__alarm_info);
@@ -94,33 +93,15 @@ bool _add_to_scheduled_alarm_list(__alarm_info_t *__alarm_info)
 			g_quark_to_string(alarm->__alarm_info->quark_app_service_name),
 			alarm->__alarm_info->quark_app_service_name);
 
-	if (alarm->__alarm_info->quark_app_service_name != g_quark_from_string(WAKEUP_ALARM_APP_ID)) {
-		g_scheduled_alarm_list = g_slist_append(g_scheduled_alarm_list, alarm);
-	}
-	else {
-		for (iter = g_scheduled_alarm_list; iter != NULL; iter = g_slist_next(iter)) {
-			count++;
-			entry = iter->data;
-			if (entry->__alarm_info->quark_app_service_name != g_quark_from_string(WAKEUP_ALARM_APP_ID)) {
-				prior = true;
-				break;
-			}
-		}
+	SECURE_LOGD("%s :target zone : [%s]\n", __FUNCTION__, g_quark_to_string(alarm->__alarm_info->zone));
+	alarm->__alarm_info->zone = __alarm_info->zone;
 
-		if (!prior) {
-			g_scheduled_alarm_list = g_slist_append(g_scheduled_alarm_list, alarm);
-			ALARM_MGR_LOG_PRINT("appended : prior is %d\tcount is %d\n", prior, count);
-		}
-		else {
-			g_scheduled_alarm_list = g_slist_insert(g_scheduled_alarm_list, alarm, count - 1);
-			ALARM_MGR_LOG_PRINT("appended : prior is %d\tcount is %d\n", prior, count);
-		}
-	}
+	g_scheduled_alarm_list = g_slist_append(g_scheduled_alarm_list, alarm);
 
 	return true;
 }
 
-bool _remove_from_scheduled_alarm_list(int pid, alarm_id_t alarm_id)
+bool _remove_from_scheduled_alarm_list(int pid, alarm_id_t alarm_id, const char *zone)
 {
 	bool result = false;
 	GSList *iter = NULL;
@@ -128,6 +109,10 @@ bool _remove_from_scheduled_alarm_list(int pid, alarm_id_t alarm_id)
 
 	for (iter = g_scheduled_alarm_list; iter != NULL; iter = g_slist_next(iter)) {
 		alarm = iter->data;
+
+		if (strcmp(g_quark_to_string(alarm->__alarm_info->zone), zone) != 0)
+			continue;
+
 		if (alarm->alarm_id == alarm_id) {
 			g_scheduled_alarm_list = g_slist_remove(g_scheduled_alarm_list, iter->data);
 			g_free(alarm);
@@ -228,12 +213,26 @@ static time_t __alarm_next_duetime_repeat(__alarm_info_t *__alarm_info)
 	duetime_tm.tm_mday = start->day;
 	duetime_tm.tm_isdst = -1;
 
-	due_time = mktime(&duetime_tm);
+	if (alarm_info->alarm_type & ALARM_TYPE_PERIOD &&
+			alarm_info->mode.u_interval.interval > 0) {
+		/* For minimize 'while loop'
+		 * Duetime should be "periodic_standard_time + (interval * x) >= current" */
+		time_t periodic_standard_time = _get_periodic_alarm_standard_time();
+		time_t temp;
+		temp = (current_time - periodic_standard_time) / alarm_info->mode.u_interval.interval;
+		due_time = periodic_standard_time + (temp * alarm_info->mode.u_interval.interval);
+	} else {
+		due_time = mktime(&duetime_tm);
+	}
 
-	while (__alarm_info->start > due_time || current_time >= due_time) {
-		due_time += alarm_info->mode.u_interval.interval;
-
-		/* due_time = mktime(&duetime_tm); */
+	if (alarm_info->mode.u_interval.interval <= 0) {
+		ALARM_MGR_ASSERT_PRINT("Error! Despite repeated alarm, interval <= 0.\nalarm_id=%d, pid=%d, app_unique_name=%s, app_service_name=%s, start time=%d",
+			__alarm_info->alarm_id, __alarm_info->pid, g_quark_to_string(__alarm_info->quark_app_unique_name),
+			g_quark_to_string(__alarm_info->quark_app_service_name), __alarm_info->start);
+	} else {
+		while (__alarm_info->start > due_time || current_time > due_time || ((!is_time_changed) && (current_time == due_time))) {
+			due_time += alarm_info->mode.u_interval.interval;
+		}
 	}
 
 	if (due_time - current_time < 10)
@@ -276,7 +275,7 @@ static time_t __alarm_next_duetime_annually(__alarm_info_t *__alarm_info)
 
 	due_time = mktime(&duetime_tm);
 
-	while (__alarm_info->start > due_time || current_time > due_time) {
+	while (__alarm_info->start > due_time || current_time > due_time || ((!is_time_changed) && (current_time == due_time))) {
 		duetime_tm.tm_year += 1;
 		due_time = mktime(&duetime_tm);
 	}
@@ -305,7 +304,6 @@ static time_t __alarm_next_duetime_monthly(__alarm_info_t *__alarm_info)
 	}
 
 	if (start->month != 0) {
-
 		duetime_tm.tm_mon = start->month - 1;
 	}
 
@@ -313,7 +311,7 @@ static time_t __alarm_next_duetime_monthly(__alarm_info_t *__alarm_info)
 
 	due_time = mktime(&duetime_tm);
 
-	while (__alarm_info->start > due_time || current_time > due_time) {
+	while (__alarm_info->start > due_time || current_time > due_time || ((!is_time_changed) && (current_time == due_time))) {
 		duetime_tm.tm_mon += 1;
 		if (duetime_tm.tm_mon == 12) {
 			duetime_tm.tm_mon = 0;
@@ -404,7 +402,7 @@ static time_t __alarm_next_duetime_weekly(__alarm_info_t *__alarm_info)
 		return due_time;
 	}
 
-	if (current_time >= due_time || !(mode->u_interval.day_of_week & 1 << wday)) {
+	if (current_time > due_time || !(mode->u_interval.day_of_week & 1 << wday) || ((!is_time_changed) && (current_time == due_time))) {
 		int day = wday + 1;
 		int interval = 1;
 		/*this week */
@@ -489,7 +487,7 @@ time_t _alarm_next_duetime(__alarm_info_t *__alarm_info)
 			due_time = mktime(due_tm);
 	}
 
-	 ALARM_MGR_EXCEPTION_PRINT("alarm_id: %d, next duetime: %d", __alarm_info->alarm_id, due_time);
+	ALARM_MGR_EXCEPTION_PRINT("alarm_id: %d, next duetime: %d", __alarm_info->alarm_id, due_time);
 
 	if (__alarm_info->end != 0 && __alarm_info->end < due_time) {
 		ALARM_MGR_LOG_PRINT("due time > end time");
@@ -526,7 +524,7 @@ static bool __find_next_alarm_to_be_scheduled(time_t *min_due_time)
 
 		interval = difftime(due_time, current_time);
 
-		if (interval <= 0)	/*2008.08.06 when the alarm expires, it may makes an error.*/ {
+		if (interval < 0)	/*2008.08.06 when the alarm expires, it may makes an error.*/ {
 			ALARM_MGR_EXCEPTION_PRINT("The duetime of alarm(%d) is OVER.", entry->alarm_id);
 			continue;
 		}

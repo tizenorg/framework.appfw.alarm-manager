@@ -1,8 +1,8 @@
-#!bin/sh
+#!/bin/sh
 
 ALARMMGR_DUMP=$1/alarmmgr
 mkdir -p $ALARMMGR_DUMP
-cp -f /var/log/alarmmgr.log $ALARMMGR_DUMP
+cp -f @_APPFW_ALARM_MANAGER_MODULE_LOG_PATH@ $ALARMMGR_DUMP
 
 alarmmgr_get_all_info
 mv -f /tmp/alarmmgr_* $ALARMMGR_DUMP

@@ -41,12 +41,30 @@
 #define MAX_QUERY_LEN 4096
 
 extern __alarm_server_context_t alarm_context;
-extern sqlite3 *alarmmgr_db;
-
+extern GSList *alarmmgr_db_list;
 bool _save_alarms(__alarm_info_t *__alarm_info);
 bool _update_alarms(__alarm_info_t *__alarm_info);
-bool _delete_alarms(alarm_id_t alarm_id);
+bool _delete_alarms(alarm_id_t alarm_id, const char *zone);
 bool _load_alarms_from_registry(void);
+
+static gint _find_zone_alarmmgr_db(void *db_info, void *data)
+{
+	_zone_alarm_db_list_t *db_struct = (_zone_alarm_db_list_t *)db_info;
+	return strcmp(db_struct->zone, (char *)data);
+}
+
+static sqlite3 *_find_db(const char *zone)
+{
+	sqlite3 *alarmmgr_db = NULL;
+	GSList *iter = g_slist_find_custom(alarmmgr_db_list, zone, (GCompareFunc)_find_zone_alarmmgr_db);
+	if (iter == NULL) {
+		SECURE_LOGE("failed to find db for zone[%s]", zone);
+		return NULL;
+	}
+	alarmmgr_db = ((_zone_alarm_db_list_t *)iter->data)->alarmmgr_db;
+
+	return alarmmgr_db;
+}
 
 bool _save_alarms(__alarm_info_t *__alarm_info)
 {
@@ -55,6 +73,13 @@ bool _save_alarms(__alarm_info_t *__alarm_info)
 	    (alarm_info_t *) &(__alarm_info->alarm_info);
 	alarm_date_t *start = &alarm_info->start;
 	alarm_mode_t *mode = &alarm_info->mode;
+
+	SECURE_LOGE("__zone %s", g_quark_to_string(__alarm_info->zone));
+	sqlite3 *alarmmgr_db = _find_db((const char *)g_quark_to_string(__alarm_info->zone));
+	if (alarmmgr_db == NULL) {
+		SECURE_LOGE("failed to retrieve db");
+		return false;
+	}
 
 	char *query = sqlite3_mprintf("insert into alarmmgr( alarm_id, start,\
 			end, pid, caller_pkgid, callee_pkgid, app_unique_name, app_service_name, app_service_name_mod, bundle, year,\
@@ -109,6 +134,12 @@ bool _update_alarms(__alarm_info_t *__alarm_info)
 	alarm_date_t *start = &alarm_info->start;
 	alarm_mode_t *mode = &alarm_info->mode;
 
+	sqlite3 *alarmmgr_db = _find_db((const char *)g_quark_to_string(__alarm_info->zone));
+	if (alarmmgr_db == NULL) {
+		SECURE_LOGE("failed to retrieve db");
+		return false;
+	}
+
 	char *query = sqlite3_mprintf("update alarmmgr set start=%d, end=%d,\
 			pid=%d, caller_pkgid=%Q, callee_pkgid=%Q, app_unique_name=%Q, app_service_name=%Q, app_service_name_mod=%Q,\
 			bundle=%Q, year=%d, month=%d, day=%d, hour=%d, min=%d, sec=%d,\
@@ -154,10 +185,16 @@ bool _update_alarms(__alarm_info_t *__alarm_info)
 	return true;
 }
 
-bool _delete_alarms(alarm_id_t alarm_id)
+bool _delete_alarms(alarm_id_t alarm_id, const char *zone)
 {
 	char *error_message = NULL;
 	char *query = sqlite3_mprintf("delete from alarmmgr where alarm_id=%d", alarm_id);
+
+	sqlite3 *alarmmgr_db = _find_db(zone);
+	if (alarmmgr_db == NULL) {
+		SECURE_LOGE("failed to retrieve db");
+		return false;
+	}
 
 	if (SQLITE_OK != sqlite3_exec(alarmmgr_db, query, NULL, NULL, &error_message)) {
 		SECURE_LOGE("sqlite3_exec() is failed. query = %s, error message = %s", query, error_message);
@@ -190,78 +227,92 @@ bool _load_alarms_from_registry()
 
 	snprintf(query, MAX_QUERY_LEN, "select * from alarmmgr");
 
-	if (SQLITE_OK != sqlite3_prepare(alarmmgr_db, query, strlen(query), &stmt, &tail)) {
-		ALARM_MGR_EXCEPTION_PRINT("sqlite3_prepare() is failed.");
-		return false;
-	}
+	GSList *iter;
+	sqlite3 *alarmmgr_db = NULL;
+	char *zone = NULL;
+	for (iter = alarmmgr_db_list; iter != NULL; iter = g_slist_next(iter)) {
+		alarmmgr_db = ((_zone_alarm_db_list_t *)iter->data)->alarmmgr_db;
+		zone = ((_zone_alarm_db_list_t *)iter->data)->zone;
 
-	for (i = 0; SQLITE_ROW == sqlite3_step(stmt); i++) {
-		__alarm_info = malloc(sizeof(__alarm_info_t));
-
-		if (G_UNLIKELY(__alarm_info == NULL)) {
-			ALARM_MGR_EXCEPTION_PRINT("Memory allocation failed.");
+		if (SQLITE_OK != sqlite3_prepare(alarmmgr_db, query, strlen(query), &stmt, &tail)) {
+			ALARM_MGR_EXCEPTION_PRINT("sqlite3_prepare() is failed.");
 			return false;
 		}
-		alarm_info = (alarm_info_t *) &(__alarm_info->alarm_info);
-		start = &alarm_info->start;
-		mode = &alarm_info->mode;
+		for (i = 0; SQLITE_ROW == sqlite3_step(stmt); i++) {
+			__alarm_info = malloc(sizeof(__alarm_info_t));
 
-		__alarm_info->alarm_id = sqlite3_column_int(stmt, 0);
-		__alarm_info->start = sqlite3_column_int(stmt, 1);
-		__alarm_info->end = sqlite3_column_int(stmt, 2);
-		__alarm_info->pid = sqlite3_column_int(stmt, 3);
+			if (G_UNLIKELY(__alarm_info == NULL)) {
+				ALARM_MGR_EXCEPTION_PRINT("Memory allocation failed.");
+				return false;
+			}
+			alarm_info = (alarm_info_t *) &(__alarm_info->alarm_info);
+			start = &alarm_info->start;
+			mode = &alarm_info->mode;
 
-		strncpy(caller_pkgid, (const char *)sqlite3_column_text(stmt, 4),
-			MAX_PKG_ID_LEN - 1);
-		strncpy(callee_pkgid, (const char *)sqlite3_column_text(stmt, 5),
-			MAX_PKG_ID_LEN - 1);
-		strncpy(app_unique_name, (const char *)sqlite3_column_text(stmt, 6),
-			MAX_SERVICE_NAME_LEN - 1);
-		strncpy(app_service_name, (const char *)sqlite3_column_text(stmt, 7),
-			MAX_SERVICE_NAME_LEN - 1);
-		strncpy(app_service_name_mod, (const char *)sqlite3_column_text(stmt, 8),
-			MAX_SERVICE_NAME_LEN - 1);
-		strncpy(bundle, (const char *)sqlite3_column_text(stmt, 9),
-			MAX_BUNDLE_NAME_LEN - 1);
-		start->year = sqlite3_column_int(stmt, 10);
-		start->month = sqlite3_column_int(stmt, 11);
-		start->day = sqlite3_column_int(stmt, 12);
-		start->hour = sqlite3_column_int(stmt, 13);
-		start->min = sqlite3_column_int(stmt, 14);
-		start->sec = sqlite3_column_int(stmt, 15);
-		mode->u_interval.day_of_week = sqlite3_column_int(stmt, 16);
-		mode->repeat = sqlite3_column_int(stmt, 17);
-		alarm_info->alarm_type = sqlite3_column_int(stmt, 18);
-		alarm_info->reserved_info = sqlite3_column_int(stmt, 19);
-		strncpy(dst_service_name, (const char *)sqlite3_column_text(stmt, 20),
-			MAX_SERVICE_NAME_LEN - 1);
-		strncpy(dst_service_name_mod, (const char *)sqlite3_column_text(stmt, 21),
-			MAX_SERVICE_NAME_LEN - 1);
+			__alarm_info->alarm_id = sqlite3_column_int(stmt, 0);
+			__alarm_info->start = sqlite3_column_int(stmt, 1);
+			__alarm_info->end = sqlite3_column_int(stmt, 2);
+			__alarm_info->pid = sqlite3_column_int(stmt, 3);
 
-		__alarm_info->quark_caller_pkgid = g_quark_from_string(caller_pkgid);
-		__alarm_info->quark_callee_pkgid = g_quark_from_string(callee_pkgid);
-		__alarm_info->quark_app_unique_name =
-		    g_quark_from_string(app_unique_name);
-		__alarm_info->quark_app_service_name =
-		    g_quark_from_string(app_service_name);
-		__alarm_info->quark_app_service_name_mod=
-		    g_quark_from_string(app_service_name_mod);
-		__alarm_info->quark_dst_service_name =
-		    g_quark_from_string(dst_service_name);
-		__alarm_info->quark_dst_service_name_mod=
-		    g_quark_from_string(dst_service_name_mod);
-		__alarm_info->quark_bundle = g_quark_from_string(bundle);
+			strncpy(caller_pkgid, (const char *)sqlite3_column_text(stmt, 4),
+					MAX_PKG_ID_LEN - 1);
+			strncpy(callee_pkgid, (const char *)sqlite3_column_text(stmt, 5),
+					MAX_PKG_ID_LEN - 1);
+			strncpy(app_unique_name, (const char *)sqlite3_column_text(stmt, 6),
+					MAX_SERVICE_NAME_LEN - 1);
+			strncpy(app_service_name, (const char *)sqlite3_column_text(stmt, 7),
+					MAX_SERVICE_NAME_LEN - 1);
+			strncpy(app_service_name_mod, (const char *)sqlite3_column_text(stmt, 8),
+					MAX_SERVICE_NAME_LEN - 1);
+			strncpy(bundle, (const char *)sqlite3_column_text(stmt, 9),
+					MAX_BUNDLE_NAME_LEN - 1);
+			start->year = sqlite3_column_int(stmt, 10);
+			start->month = sqlite3_column_int(stmt, 11);
+			start->day = sqlite3_column_int(stmt, 12);
+			start->hour = sqlite3_column_int(stmt, 13);
+			start->min = sqlite3_column_int(stmt, 14);
+			start->sec = sqlite3_column_int(stmt, 15);
+			mode->u_interval.day_of_week = sqlite3_column_int(stmt, 16);
+			mode->repeat = sqlite3_column_int(stmt, 17);
+			alarm_info->alarm_type = sqlite3_column_int(stmt, 18);
+			alarm_info->reserved_info = sqlite3_column_int(stmt, 19);
+			strncpy(dst_service_name, (const char *)sqlite3_column_text(stmt, 20),
+					MAX_SERVICE_NAME_LEN - 1);
+			strncpy(dst_service_name_mod, (const char *)sqlite3_column_text(stmt, 21),
+					MAX_SERVICE_NAME_LEN - 1);
 
-		_alarm_next_duetime(__alarm_info);
-		alarm_context.alarms = g_slist_append(alarm_context.alarms, __alarm_info);
+			__alarm_info->quark_caller_pkgid = g_quark_from_string(caller_pkgid);
+			__alarm_info->quark_callee_pkgid = g_quark_from_string(callee_pkgid);
+			__alarm_info->quark_app_unique_name =
+				g_quark_from_string(app_unique_name);
+			__alarm_info->quark_app_service_name =
+				g_quark_from_string(app_service_name);
+			__alarm_info->quark_app_service_name_mod=
+				g_quark_from_string(app_service_name_mod);
+			__alarm_info->quark_dst_service_name =
+				g_quark_from_string(dst_service_name);
+			__alarm_info->quark_dst_service_name_mod=
+				g_quark_from_string(dst_service_name_mod);
+			__alarm_info->quark_bundle = g_quark_from_string(bundle);
+			__alarm_info->zone = g_quark_from_string(zone);
+
+			_alarm_next_duetime(__alarm_info);
+			alarm_context.alarms = g_slist_append(alarm_context.alarms, __alarm_info);
+		}
+
+		if (SQLITE_OK != sqlite3_finalize(stmt)) {
+			ALARM_MGR_EXCEPTION_PRINT("sqlite3_finalize() is failed.");
+			return false;
+		}
+		stmt = NULL;
 	}
-
 
 	_alarm_schedule();
 	if (SQLITE_OK != sqlite3_finalize(stmt)) {
 		ALARM_MGR_EXCEPTION_PRINT("sqlite3_finalize() is failed.");
 		return false;
 	}
+	stmt = NULL;
 
 	return true;
 }

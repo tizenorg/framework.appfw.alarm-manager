@@ -108,26 +108,3 @@ bool _alarm_set_timer(__alarm_server_context_t *alarm_context, int timer, time_t
 	alarm_context->c_due_time = due_time;
 	return true;
 }
-
-int _set_sys_time(time_t _time)
-{
-	struct tm result;
-	/* Ignore return value of gmtime_r(). */
-	(void) gmtime_r(&_time, &result);
-
-	stime(&_time);
-
-	return 1;
-}
-
-int _set_time(time_t _time)
-{
-	ALARM_MGR_LOG_PRINT("ENTER FUNC _set_time(%d)", _time);
-	_set_rtc_time(_time);
-	//_set_sys_time(_time);
-
-	/* inoti (broadcasting without data 
-	 * send system noti that time has changed */
-
-	return 0;
-}

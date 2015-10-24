@@ -20,9 +20,6 @@
  *
  */
 
-
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -40,6 +37,8 @@
 #include <appsvc.h>
 #include <aul.h>
 #include <gio/gio.h>
+#include <security-server.h>
+#include <pkgmgr-info.h>
 
 #define MAX_KEY_SIZE 256
 #define MAX_PROC_NAME_LEN 512
@@ -89,6 +88,19 @@ static const GDBusInterfaceVTable interface_vtable =
 	NULL,
 	NULL
 };
+
+static int __bg_category_func(const char *name, void *user_data)
+{
+	bg_category_cb_info_t *info = (bg_category_cb_info_t *)user_data;
+	ALARM_MGR_LOG_PRINT("appid[%s], bg name = %s", info->appid, name);
+	if (name &&
+			strncmp("enable", name, strlen(name)) && strncmp("disable", name, strlen(name))) {
+		info->has_bg = true;
+		return -1;
+	}
+
+	return 0;
+}
 
 static void __add_resultcb(alarm_id_t alarm_id, alarm_cb_t cb_func, void *data)
 {
@@ -149,7 +161,7 @@ static void __handle_expiry_method_call(GDBusConnection *conn,
                 const gchar *method, GVariant *param, GDBusMethodInvocation *invocation, gpointer user_data)
 {
 	if (method && strcmp(method, "alarm_expired") == 0) {
-		const gchar *package_name = NULL;
+		gchar *package_name = NULL;
 		alarm_id_t alarm_id = 0;
 		alarm_cb_info_t *info = NULL;
 		g_variant_get(param, "(is)", &alarm_id, &package_name);
@@ -237,6 +249,54 @@ static bool __alarm_validate_time(alarm_date_t *date, int *error_code)
 	return true;
 }
 
+static bool __is_permitted(const char *app_id, int alarm_type)
+{
+	if (app_id == NULL) {
+		ALARM_MGR_EXCEPTION_PRINT("app_id is NULL. Only expicit launch is permitted\n");
+		return false;
+	}
+
+	pkgmgrinfo_appinfo_h handle = NULL;
+	int ret;
+	bool _return = false;
+
+	ret = pkgmgrinfo_appinfo_get_appinfo(app_id, &handle);
+	if (ret != PMINFO_R_OK) {
+		ALARM_MGR_EXCEPTION_PRINT("Failed to get appinfo [%s]\n", app_id);
+	} else {
+		char *app_type = NULL;
+		ret = pkgmgrinfo_appinfo_get_component_type(handle, &app_type);
+		if (app_type && strcmp("uiapp", app_type) == 0) {
+			ALARM_MGR_LOG_PRINT("[%s] is ui application. It is allowed", app_id);
+			_return = true;
+			goto out;
+		} else if (app_type && strcmp("svcapp", app_type) == 0) {
+			ALARM_MGR_LOG_PRINT("[%s] is service application.", app_id);
+
+			bg_category_cb_info_t info = {
+				.appid = app_id,
+				.has_bg = false
+			};
+
+			if (alarm_type & ALARM_TYPE_INEXACT) {
+				ret = pkgmgrinfo_appinfo_foreach_background_category(handle, __bg_category_func, &info);
+				if (ret == PMINFO_R_OK && info.has_bg) {
+					ALARM_MGR_LOG_PRINT("[%s] has background categories.", app_id);
+					_return = true;
+					goto out;
+				} else {
+					ALARM_MGR_EXCEPTION_PRINT("Failed to foreach background category. [%s] is not allowed\n", app_id);
+				}
+			}
+		}
+	}
+
+out :
+	if (handle)
+		pkgmgrinfo_appinfo_destroy_appinfo(handle);
+	return _return;
+}
+
 static int __sub_init()
 {
 	GError *error = NULL;
@@ -260,8 +320,11 @@ static int __sub_init()
 
 	alarm_context.connection = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
 	if (alarm_context.connection == NULL) {
-		ALARM_MGR_EXCEPTION_PRINT("g_bus_get_sync() is failed. error: %s", error->message);
-		g_error_free(error);
+		ALARM_MGR_EXCEPTION_PRINT("g_bus_get_sync() is failed.");
+		if (error) {
+			ALARM_MGR_EXCEPTION_PRINT("dbus error message: %s", error->message);
+			g_error_free(error);
+		}
 		pthread_mutex_unlock(&init_lock);
 		return ERR_ALARM_SYSTEM_FAIL;
 	}
@@ -293,7 +356,7 @@ static int __sub_init()
 		return ERR_ALARM_SYSTEM_FAIL;
 	}
 	else {
-		ret = read(fd, process_name, MAX_LEN);
+		ret = read(fd, process_name, MAX_LEN - 1);
 		close(fd);
 		if (ret < 0) {
 			ALARM_MGR_EXCEPTION_PRINT("Unable to read the proc file(%d).", getpid());
@@ -324,7 +387,6 @@ static int __sub_init()
 EXPORT_API int alarmmgr_init(const char *appid)
 {
 	SECURE_LOGD("Enter");
-	int request_name_result = 0;
 	char service_name[MAX_SERVICE_NAME_LEN] = { 0 };
 	char service_name_mod[MAX_SERVICE_NAME_LEN]= { 0 };
 	int ret = ALARMMGR_RESULT_SUCCESS;
@@ -551,9 +613,10 @@ EXPORT_API int alarmmgr_set_repeat_mode(alarm_entry_t *alarm,
 	}
 
 	alarm_info->mode.repeat = repeat;
-
-	if (repeat == ALARM_REPEAT_MODE_REPEAT
-	    || repeat == ALARM_REPEAT_MODE_WEEKLY) {
+	if (repeat == ALARM_REPEAT_MODE_REPEAT || repeat == ALARM_REPEAT_MODE_WEEKLY) {
+		if (interval <= 0) {
+			return ERR_ALARM_INVALID_PARAM;
+		}
 		alarm_info->mode.u_interval.interval = interval;
 	}
 
@@ -611,26 +674,17 @@ EXPORT_API int alarmmgr_get_type(const alarm_entry_t *alarm, int *alarm_type)
 
 static int __alarmmgr_init_appsvc(void)
 {
-	int ret;
-
 	if (b_initialized) {
-		ALARM_MGR_EXCEPTION_PRINT("alarm was already initialized\n");
+		ALARM_MGR_EXCEPTION_PRINT("alarm was already initialized.");
 		return ALARMMGR_RESULT_SUCCESS;
 	}
-#if !GLIB_CHECK_VERSION(2,32,0)
-	g_thread_init(NULL);
-#endif
 
-	dbus_g_thread_init();
-
-	ret = __sub_init();
+	int ret = __sub_init();
 	if (ret < 0)
 		return ret;
 
 	b_initialized = true;
-
 	return ALARMMGR_RESULT_SUCCESS;
-
 }
 
 EXPORT_API void *alarmmgr_get_alarm_appsvc_info(alarm_id_t alarm_id, int *return_code){
@@ -740,6 +794,36 @@ EXPORT_API int alarmmgr_add_alarm_appsvc_with_localtime(alarm_entry_t *alarm, vo
 	{
 		ALARM_MGR_EXCEPTION_PRINT("Invalid parameter\n");
 		return ERR_ALARM_INVALID_PARAM;
+	}
+
+	// Checking api version
+	int ret;
+	int result = 0;
+	pkgmgrinfo_pkginfo_h pkginfo = NULL;
+	char pkgid[512] = {0, };
+	const char *api_version = "2.4";
+
+	if (aul_app_get_pkgid_bypid(getpid(), pkgid, sizeof(pkgid)) != AUL_R_OK) {
+		ALARM_MGR_EXCEPTION_PRINT("aul_app_get_pkgid_bypid() is failed. PID %d may not be app.", getpid());
+	} else {
+		ret = pkgmgrinfo_pkginfo_get_pkginfo(pkgid, &pkginfo);
+		if (ret != PMINFO_R_OK) {
+			ALARM_MGR_EXCEPTION_PRINT("Failed to get pkginfo\n");
+		}
+		else {
+			ret = pkgmgrinfo_pkginfo_check_api_version(pkginfo, api_version, &result);
+			pkgmgrinfo_pkginfo_destroy_pkginfo(pkginfo);
+			if (ret) {
+				ALARM_MGR_EXCEPTION_PRINT("Failed to check api version [%d]\n", ret);
+				return ERR_ALARM_SYSTEM_FAIL;
+			}
+		}
+	}
+
+	if (result >= 0 && //Since 2.4
+			!__is_permitted(appid, alarm_info->alarm_type)) {
+		ALARM_MGR_EXCEPTION_PRINT("[%s] is not permitted \n", appid);
+		return ERR_ALARM_NOT_PERMITTED_APP;
 	}
 
 	if (alarm_info == NULL || alarm_id == NULL) {
@@ -888,7 +972,7 @@ EXPORT_API int alarmmgr_add_alarm_appsvc(int alarm_type, time_t trigger_at_time,
 	struct tm duetime_tm;
 	alarm_info_t alarm_info;
 	const char *operation = NULL;
-	char *appid = NULL;
+	const char *appid = NULL;
 
 	ALARM_MGR_LOG_PRINT("[alarm-lib]:alarm_create() is called\n");
 
@@ -932,6 +1016,41 @@ EXPORT_API int alarmmgr_add_alarm_appsvc(int alarm_type, time_t trigger_at_time,
 	alarm_info.alarm_type = alarm_type;
 	alarm_info.alarm_type |= ALARM_TYPE_RELATIVE;
 
+	// Checking api version
+	int ret;
+	int result = 0;
+	pkgmgrinfo_pkginfo_h pkginfo = NULL;
+	char pkgid[512] = {0, };
+	const char *api_version = "2.4";
+
+	if (aul_app_get_pkgid_bypid(getpid(), pkgid, sizeof(pkgid)) != AUL_R_OK) {
+		ALARM_MGR_EXCEPTION_PRINT("aul_app_get_pkgid_bypid() is failed. PID %d may not be app.", getpid());
+	} else {
+		ret = pkgmgrinfo_pkginfo_get_pkginfo(pkgid, &pkginfo);
+		if (ret != PMINFO_R_OK) {
+			ALARM_MGR_EXCEPTION_PRINT("Failed to get pkginfo\n");
+		}
+		else {
+			ret = pkgmgrinfo_pkginfo_check_api_version(pkginfo, api_version, &result);
+			pkgmgrinfo_pkginfo_destroy_pkginfo(pkginfo);
+			if (ret) {
+				ALARM_MGR_EXCEPTION_PRINT("Failed to check api version [%d]\n", ret);
+				return ERR_ALARM_SYSTEM_FAIL;
+			}
+		}
+	}
+
+	if (result < 0) {
+		if (alarm_info.alarm_type & ALARM_TYPE_INEXACT) {
+			alarm_info.alarm_type ^= ALARM_TYPE_INEXACT;
+		}
+	} else { //Since 2.4
+		if (!__is_permitted(appid, alarm_info.alarm_type)) {
+			ALARM_MGR_EXCEPTION_PRINT("[%s] is not permitted \n", appid);
+			return ERR_ALARM_NOT_PERMITTED_APP;
+		}
+	}
+
 	gettimeofday(&current_time, NULL);
 
 	if (current_time.tv_usec > 500 * 1000)
@@ -960,6 +1079,10 @@ EXPORT_API int alarmmgr_add_alarm_appsvc(int alarm_type, time_t trigger_at_time,
 	alarm_info.start.min = duetime_tm.tm_min;
 	alarm_info.start.sec = duetime_tm.tm_sec;
 
+	if ((alarm_info.alarm_type & ALARM_TYPE_INEXACT) && interval < MIN_INEXACT_INTERVAL) {
+		interval = MIN_INEXACT_INTERVAL;
+	}
+
 	if (interval <= 0) {
 		alarm_info.mode.repeat = ALARM_REPEAT_MODE_ONCE;
 		alarm_info.mode.u_interval.interval = 0;
@@ -971,7 +1094,7 @@ EXPORT_API int alarmmgr_add_alarm_appsvc(int alarm_type, time_t trigger_at_time,
 	ALARM_MGR_EXCEPTION_PRINT("trigger_at_time(%d), start(%d-%d-%d, %02d:%02d:%02d), repeat(%d), interval(%d), type(%d)",
 		trigger_at_time, alarm_info.start.day, alarm_info.start.month, alarm_info.start.year,
 		alarm_info.start.hour, alarm_info.start.min, alarm_info.start.sec,
-		alarm_info.mode.repeat, alarm_info.mode.u_interval, alarm_info.alarm_type);
+		alarm_info.mode.repeat, alarm_info.mode.u_interval.interval, alarm_info.alarm_type);
 
 	if (!_send_alarm_create_appsvc(alarm_context, &alarm_info, alarm_id, b, &error_code)) {
 		return error_code;
@@ -1098,10 +1221,6 @@ EXPORT_API int alarmmgr_add_alarm(int alarm_type, time_t trigger_at_time,
 EXPORT_API int alarmmgr_add_alarm_withcb(int alarm_type, time_t trigger_at_time,
 				  time_t interval, alarm_cb_t handler, void *user_param, alarm_id_t *alarm_id)
 {
-	char dst_service_name[MAX_SERVICE_NAME_LEN] = { 0 };
-	char dst_service_name_mod[MAX_SERVICE_NAME_LEN] = { 0 };
-	int i = 0;
-	int j = 0;
 	int error_code = 0;
 	struct timeval current_time;
 	struct tm duetime_tm;
@@ -1185,7 +1304,6 @@ EXPORT_API int alarmmgr_remove_alarm(alarm_id_t alarm_id)
 	int error_code;
 	int ret;
 	alarm_cb_info_t *info;
-	alarm_info_t alarm;
 
 	ret = __sub_init();
 	if (ret < 0)
@@ -1264,11 +1382,12 @@ EXPORT_API int alarmmgr_enum_alarm_ids(alarm_enum_fn_t fn, void *user_param)
 	SECURE_LOGD("alarm_manager_call_alarm_get_number_of_ids_sync() is called");
 	if (!alarm_manager_call_alarm_get_number_of_ids_sync(
 	    (AlarmManager*)alarm_context.proxy, alarm_context.pid, e_cookie, &maxnum_of_ids, &return_code, NULL, &error)) {
-		/* dbus-glib error */
-		/* error_code should be set */
-		ALARM_MGR_EXCEPTION_PRINT(
-		    "alarm_manager_call_alarm_get_number_of_ids_sync() is failed by dbus. return_code[%d], err message[%s]",
-		    return_code, error->message);
+		/* dbus error. error_code should be set */
+		ALARM_MGR_EXCEPTION_PRINT("alarm_manager_call_alarm_get_number_of_ids_sync() is failed by dbus. return_code[%d]", return_code);
+		if (error) {
+			ALARM_MGR_EXCEPTION_PRINT("dbus error message: %s", error->message);
+			g_error_free(error);
+		}
 		g_free(e_cookie);
 		return ERR_ALARM_SYSTEM_FAIL;
 	}
@@ -1285,20 +1404,18 @@ EXPORT_API int alarmmgr_enum_alarm_ids(alarm_enum_fn_t fn, void *user_param)
 	SECURE_LOGD("alarm_manager_call_alarm_get_list_of_ids_sync() is called");
 	if (!alarm_manager_call_alarm_get_list_of_ids_sync(
 		     (AlarmManager*)alarm_context.proxy, alarm_context.pid, maxnum_of_ids, &alarm_array, &num_of_ids, &return_code, NULL, &error)) {
-		/*dbus-glib error */
-		/* error_code should be set */
+		/* dbus error. error_code should be set */
 		ALARM_MGR_EXCEPTION_PRINT(
 		    "alarm_manager_call_alarm_get_list_of_ids_sync() failed by dbus. num_of_ids[%d], return_code[%d].", num_of_ids, return_code);
+		if (error) {
+			ALARM_MGR_EXCEPTION_PRINT("dbus error message: %s.", error->message);
+			g_error_free(error);
+		}
 		return ERR_ALARM_SYSTEM_FAIL;
 	}
 
 	if (return_code != ALARMMGR_RESULT_SUCCESS) {
 		return return_code;
-	}
-
-	if (error != NULL) {
-		ALARM_MGR_LOG_PRINT("Alarm server is not ready dbus. error message %s.", error->message);
-		return ERR_ALARM_SYSTEM_FAIL;
 	}
 
 	if (alarm_array == NULL) {
@@ -1538,17 +1655,37 @@ EXPORT_API int alarmmgr_add_reference_periodic_alarm_withcb(int interval,
 EXPORT_API int alarmmgr_set_systime(int new_time)
 {
 	int error_code;
-	ALARM_MGR_LOG_PRINT("[alarm-lib]:alarmmgr_set_systime() is called.");
+	ALARM_MGR_LOG_PRINT("[alarm-lib]:alarmmgr_set_systime(%d) is called.", new_time);
 
 	if (__sub_init() < 0) {
 		return ERR_ALARM_SYSTEM_FAIL;
 	}
 
 	if (!_send_alarm_set_time(alarm_context, new_time, &error_code)) {
+		ALARM_MGR_EXCEPTION_PRINT("Failed to set time. error: %d", error_code);
 		return error_code;
 	}
 
 	ALARM_MGR_LOG_PRINT("[alarm-lib]: successfully set the time(%d) by pid(%d).", new_time, alarm_context.pid);
+	return ALARMMGR_RESULT_SUCCESS;
+}
+
+EXPORT_API int alarmmgr_set_systime_with_propagation_delay(struct timespec new_time, struct timespec req_time)
+{
+	int error_code;
+	ALARM_MGR_LOG_PRINT("[alarm-lib] New: %d(sec) %09d(nsec), Requested: %d(sec) %09d(nsec)",
+		new_time.tv_sec, new_time.tv_nsec, req_time.tv_sec, req_time.tv_nsec);
+
+	if (__sub_init() < 0) {
+		return ERR_ALARM_SYSTEM_FAIL;
+	}
+
+	if (!_send_alarm_set_time_with_propagation_delay(alarm_context, new_time.tv_sec, new_time.tv_nsec, req_time.tv_sec, req_time.tv_nsec, &error_code)) {
+		ALARM_MGR_EXCEPTION_PRINT("Failed to set time with propagation delay. error: %d", error_code);
+		return error_code;
+	}
+
+	ALARM_MGR_LOG_PRINT("[alarm-lib]: successfully set the time by pid(%d).", alarm_context.pid);
 	return ALARMMGR_RESULT_SUCCESS;
 }
 

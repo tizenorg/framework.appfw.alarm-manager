@@ -149,8 +149,9 @@ int main(int argc, char** argv)
  * @{
  */
 
-#include<sys/types.h>
-#include<stdbool.h>
+#include <sys/types.h>
+#include <stdbool.h>
+#include <time.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -185,6 +186,7 @@ typedef enum {
 * This enumeration has error codes of alarm
 */
 	typedef enum {
+		ERR_ALARM_NOT_PERMITTED_APP = -11,
 		ERR_ALARM_INVALID_PARAM = -10,
 				     /**<Invalid parameter*/
 		ERR_ALARM_INVALID_ID,	/**<Invalid id*/
@@ -225,6 +227,7 @@ typedef enum {
 #define ALARM_TYPE_DEFAULT	0x0	/*< non volatile */
 #define ALARM_TYPE_VOLATILE	0x02	/*< volatile */
 #define ALARM_TYPE_NOLAUNCH 0x04	/*<without launch */
+#define ALARM_TYPE_INEXACT 0x08	/*<inexact alarm */
 
 
 /**
@@ -277,7 +280,6 @@ typedef struct alarm_info_t alarm_entry_t;
 	}
 }
  * @endcode
- * @limo
  */
 int alarmmgr_init(const char *appid);
 
@@ -358,7 +360,6 @@ int callback(alarm_id_t alarm_id,void* user_param)
 }
 
  * @endcode
- * @limo
  */
 int alarmmgr_set_cb(alarm_cb_t handler, void *user_param);
 
@@ -394,7 +395,6 @@ int alarmmgr_set_cb(alarm_cb_t handler, void *user_param);
 
 
  * @endcode
- * @limo
  */
 alarm_entry_t *alarmmgr_create_alarm(void);
 
@@ -441,7 +441,6 @@ alarm_entry_t *alarmmgr_create_alarm(void);
  }
 
  * @endcode
- * @limo
  */
 int alarmmgr_free_alarm(alarm_entry_t *alarm);
 
@@ -503,7 +502,6 @@ int alarmmgr_free_alarm(alarm_entry_t *alarm);
  }
 
  * @endcode
- * @limo
  */
 int alarmmgr_set_time(alarm_entry_t *alarm, alarm_date_t time);
 
@@ -572,7 +570,6 @@ int alarmmgr_set_time(alarm_entry_t *alarm, alarm_date_t time);
  }
 
  * @endcode
- * @limo
  */
 int alarmmgr_get_time(const alarm_entry_t *alarm, alarm_date_t *time);
 
@@ -631,7 +628,6 @@ int alarmmgr_get_time(const alarm_entry_t *alarm, alarm_date_t *time);
  }
 
  * @endcode
- * @limo
  */
 int alarmmgr_set_repeat_mode(alarm_entry_t *alarm,
 				     alarm_repeat_mode_t repeat_mode,
@@ -687,7 +683,6 @@ int alarmmgr_set_repeat_mode(alarm_entry_t *alarm,
  }
 
  * @endcode
- * @limo
  */
 int alarmmgr_get_repeat_mode(const alarm_entry_t *alarm,
 				     alarm_repeat_mode_t *repeat_mode,
@@ -738,7 +733,6 @@ int alarmmgr_get_repeat_mode(const alarm_entry_t *alarm,
  }
 
  * @endcode
- * @limo
  */
 int alarmmgr_set_type(alarm_entry_t *alarm, int alarm_type);
 
@@ -783,7 +777,6 @@ int alarmmgr_set_type(alarm_entry_t *alarm, int alarm_type);
  }
 
  * @endcode
- * @limo
  */
 int alarmmgr_get_type(const alarm_entry_t *alarm, int *alarm_type);
 
@@ -872,7 +865,6 @@ int alarmmgr_get_type(const alarm_entry_t *alarm, int *alarm_type);
 
 }
  * @endcode
- * @limo
  */
 int alarmmgr_add_alarm_appsvc_with_localtime(alarm_entry_t *alarm,void *bundle_data, alarm_id_t *alarm_id);
 
@@ -957,7 +949,6 @@ int alarmmgr_add_alarm_appsvc_with_localtime(alarm_entry_t *alarm,void *bundle_d
 	 alarmmgr_free_alarm( alarm) ;
  }
  * @endcode
- * @limo
  */
 int alarmmgr_add_alarm_with_localtime(alarm_entry_t *alarm,
 					      const char *destination,
@@ -1021,7 +1012,6 @@ int alarmmgr_add_alarm_with_localtime(alarm_entry_t *alarm,
  }
 
  * @endcode
- * @limo
  */
 int alarmmgr_add_alarm_appsvc(int alarm_type, time_t trigger_at_time,
 			       time_t interval, void *bundle_data,
@@ -1090,7 +1080,6 @@ int alarmmgr_add_alarm_appsvc(int alarm_type, time_t trigger_at_time,
  }
 
  * @endcode
- * @limo
  */
 int alarmmgr_add_alarm(int alarm_type, time_t trigger_at_time,
 			       time_t interval, const char *destination,
@@ -1144,7 +1133,6 @@ int alarmmgr_add_alarm(int alarm_type, time_t trigger_at_time,
  }
 
  * @endcode
- * @limo
  */
 int alarmmgr_remove_alarm(alarm_id_t alarm_id);
 
@@ -1208,7 +1196,6 @@ int alarmmgr_remove_all(void);
  }
 
  * @endcode
- * @limo
  */
 int alarmmgr_enum_alarm_ids(alarm_enum_fn_t fn, void *user_param);
 
@@ -1268,7 +1255,6 @@ int alarmmgr_enum_alarm_ids(alarm_enum_fn_t fn, void *user_param);
 	alarmmgr_remove_alarm( alarm_id) ;
  }
  * @endcode
- * @limo
  */
 int alarmmgr_get_info(alarm_id_t alarm_id, alarm_entry_t *alarm);
 
@@ -1332,7 +1318,6 @@ int main(int argc,char **argv {
 
  }
  * @endcode
- * @limo
  */
 void *alarmmgr_get_alarm_appsvc_info(alarm_id_t alarm_id, int *return_code);
 
@@ -1380,7 +1365,6 @@ int main(int argc,char **argv {
 
  }
  * @endcode
- * @limo
  */
 int alarmmgr_set_rtc_time(alarm_date_t *time);
 
@@ -1394,6 +1378,19 @@ int alarmmgr_set_rtc_time(alarm_date_t *time);
  * @retval	#ERR_ALARM_SYSTEM_FAIL		System failure
  */
 int alarmmgr_set_systime(int new_time);
+
+/**
+ * This function changes the system time and compensates the time using propagation delay.
+ * @param	[in]		new_time		system time to be set (seconds, nanoseconds)
+ * @param	[in]		req_time		time to request to change the system time (seconds, nanoseconds)
+ *
+ * @return	@c ALARMMGR_RESULT_SUCCESS on success,
+ *			otherwise a negative error value
+ * @retval	#ALARMMGR_RESULT_SUCCESS	Successful
+ * @retval	#ERR_ALARM_SYSTEM_FAIL		System failure
+ * @retval	#ERR_ALARM_INVALID_PARAM	invalid parameter
+ */
+int alarmmgr_set_systime_with_propagation_delay(struct timespec new_time, struct timespec req_time);
 
 /**
  * This function changes the timezone which tranferred by other module

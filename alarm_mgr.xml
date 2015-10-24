@@ -46,6 +46,7 @@
       <arg type="i" name="alarm_info_end_month" direction="in" />
       <arg type="i" name="alarm_info_end_day" direction="in" />
       <arg type="i" name="alarm_info_mode_day_of_week" direction="in" />
+      <arg type="u" name="alarm_info_mode_interval" direction="in" />
       <arg type="i" name="alarm_info_mode_repeat" direction="in" />
       <arg type="i" name="alarm_info_alarm_type" direction="in" />
       <arg type="i" name="alarm_info_reserved_info" direction="in" />
@@ -151,9 +152,16 @@
       <arg type="i" name="time" direction="in" />
       <arg type="i" name="return_code" direction="out" />
     </method>
-    <method name="alarm_set_timezone">
-      <arg type="s" name="tzpath_str" direction="in" />
-      <arg type="i" name="return_code" direction="out" />
+    <method name="alarm_set_time_with_propagation_delay">
+	  <arg type="u" name="new_sec" direction="in" />
+	  <arg type="u" name="new_nsec" direction="in" />
+	  <arg type="u" name="req_sec" direction="in" />
+	  <arg type="u" name="req_nsec" direction="in" />
+	  <arg type="i" name="return_code" direction="out" />
+    </method>
+	<method name="alarm_set_timezone">
+	  <arg type="s" name="tzpath_str" direction="in" />
+	  <arg type="i" name="return_code" direction="out" />
     </method>
   </interface>
 </node>

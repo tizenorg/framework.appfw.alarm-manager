@@ -8,10 +8,22 @@
 			<label name="alarm-server::alarm-periodic"/>
 		</provide>
 		<request>
+			<smack request="_" type="rwx"/>
 			<smack request="deviced::display" type="rw"/>
 			<smack request="alarm-server::alarm-ref-periodic" type="w"/>
 			<smack request="alarm-server::alarm-periodic" type="w"/>
 			<smack request="security-server::api-cookie-check" type="w"/>
+			<smack request="pkgmgr::db" type="rl"/>
+			<smack request="system::sys_logging" type="rx"/>
+			<smack request="device::sys_logging" type="rw"/>
+			<smack request="device::app_logging" type="rw"/>
+			<smack request="device::alarm" type="rw"/>
+			<smack request="aul::launch" type="x"/>
+			<smack request="app-svc::jump" type="x"/>
+			<smack request="app-svc::db" type="rw"/>
+			<smack request="tizen::vconf::public::r::platform::rw" type="rw"/>
+			<smack request="tizen::vconf::platform::rw" type="rw"/>
+			<smack request="tizen::vconf::setting::admin" type="rl"/>
 		</request>
 	</define>
 	<assign>
